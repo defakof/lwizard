@@ -70,7 +70,6 @@ Build trees **`vsbuild/`** and **`build/`** are gitignored.
 
 - MO2 plugin API (**uibase**): [modorganizer-uibase](https://github.com/ModOrganizer2/modorganizer-uibase)  
 - MO2 wiki — [Writing Mod Organizer Plugins](https://github.com/ModOrganizer2/modorganizer/wiki/Writing-Mod-Organizer-Plugins)  
-- Full toolchain and workspace notes (sibling docs in the parent project): **`project_context.md`** and **`setup_checklist.md`**
 
 ## License
 
