@@ -1,9 +1,8 @@
 #include "bg3_localization_content.h"
+#include "lwizard_divine.h"
 #include "lwizard_log.h"
 
 #include <QDir>
-#include <QDirIterator>
-#include <QFileInfo>
 #include <QMutexLocker>
 #include <QProcess>
 #include <QThread>
@@ -155,36 +154,13 @@ QString BG3LocalizationContent::resolvedDivinePath() const
     return m_divinePath;
 
   m_divinePathResolved = true;
-  const QString base   = m_organizer->basePath();
-
-  // 1. Known location shipped with the unofficial BG3 plugin
-  const QString known =
-      base + "/plugins/basic_games/games/baldursgate3/tools/Divine.exe";
-  if (QFileInfo::exists(known)) {
-    m_divinePath = QDir::toNativeSeparators(known);
+  m_divinePath         = LWizardDivine::existingExecutable(m_organizer);
+  if (!m_divinePath.isEmpty())
     LWizardLog::debug(QStringLiteral("Divine.exe found at ") + m_divinePath);
-    return m_divinePath;
-  }
-
-  // 2. Search the entire plugins folder recursively
-  QDirIterator it(base + "/plugins", QStringList{QStringLiteral("Divine.exe")},
-                  QDir::Files, QDirIterator::Subdirectories);
-  if (it.hasNext()) {
-    m_divinePath = QDir::toNativeSeparators(it.next());
-    LWizardLog::debug(QStringLiteral("Divine.exe found at ") + m_divinePath);
-    return m_divinePath;
-  }
-
-  // 3. Download target (set by LWizardPlugin::findOrDownloadDivine)
-  const QString downloaded = base + "/plugins/lwizard/Divine.exe";
-  if (QFileInfo::exists(downloaded)) {
-    m_divinePath = QDir::toNativeSeparators(downloaded);
-    LWizardLog::debug(QStringLiteral("Divine.exe found at ") + m_divinePath);
-    return m_divinePath;
-  }
-
-  LWizardLog::warn(QStringLiteral("Divine.exe not found — pak localization scanning disabled"));
-  return {};
+  else
+    LWizardLog::warn(
+        QStringLiteral("Divine.exe not found — pak localization scanning disabled"));
+  return m_divinePath;
 }
 
 bool BG3LocalizationContent::pakHasLocalization(const QString& pakPath,

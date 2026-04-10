@@ -15,19 +15,43 @@ find_package(Qt6 REQUIRED COMPONENTS Widgets)
 find_package(mo2-cmake CONFIG REQUIRED)
 find_package(mo2-uibase CONFIG REQUIRED)
 
+# Shared code (ModDataContent, Divine helper, log, Qt resources)
+add_library(lwizard_common STATIC)
+target_sources(lwizard_common PRIVATE
+  src/bg3_localization_content.cpp
+  src/bg3_localization_content.h
+  src/lwizard_divine.cpp
+  src/lwizard_divine.h
+  src/lwizard_log.cpp
+  src/lwizard_log.h
+  resources/lwizard.qrc
+)
+set_target_properties(lwizard_common PROPERTIES
+  POSITION_INDEPENDENT_CODE ON
+  AUTOMOC ON
+)
+target_link_libraries(lwizard_common PRIVATE mo2::uibase Qt6::Widgets)
+
 add_library(lwizard SHARED)
 mo2_configure_plugin(lwizard WARNINGS ON TRANSLATIONS OFF NO_SOURCES)
 target_sources(lwizard PRIVATE
   src/lwizard_plugin.cpp
   src/lwizard_plugin.h
-  src/bg3_localization_content.cpp
-  src/bg3_localization_content.h
-  src/lwizard_log.cpp
-  src/lwizard_log.h
   src/lwizard_window.cpp
   src/lwizard_window.h
-  resources/lwizard.qrc
 )
-target_link_libraries(lwizard PRIVATE mo2::uibase Qt6::Widgets)
+target_link_libraries(lwizard PRIVATE lwizard_common mo2::uibase Qt6::Widgets)
 
 mo2_install_plugin(lwizard)
+
+add_library(lwizard_unpack SHARED)
+mo2_configure_plugin(lwizard_unpack WARNINGS ON TRANSLATIONS OFF NO_SOURCES)
+target_sources(lwizard_unpack PRIVATE
+  src/lwizard_unpack_plugin.cpp
+  src/lwizard_unpack_plugin.h
+  src/lwizard_unpack_dialog.cpp
+  src/lwizard_unpack_dialog.h
+)
+target_link_libraries(lwizard_unpack PRIVATE lwizard_common mo2::uibase Qt6::Widgets)
+
+mo2_install_plugin(lwizard_unpack)

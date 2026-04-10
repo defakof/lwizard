@@ -1,21 +1,17 @@
 #pragma once
 
-#include <memory>
-
 #include <uibase/iplugintool.h>
 #include <uibase/pluginsetting.h>
 #include <uibase/versioninfo.h>
 
-class BG3LocalizationContent;
-
-class LWizardPlugin : public MOBase::IPluginTool
+class LWizardUnpackPlugin : public MOBase::IPluginTool
 {
   Q_OBJECT
   Q_INTERFACES(MOBase::IPlugin MOBase::IPluginTool)
-  Q_PLUGIN_METADATA(IID "org.modorganizer.lwizard")
+  Q_PLUGIN_METADATA(IID "org.modorganizer.lwizard.unpack")
 
 public:
-  LWizardPlugin() = default;
+  LWizardUnpackPlugin() = default;
 
   bool init(MOBase::IOrganizer* organizer) override;
   QString name() const override;
@@ -24,7 +20,6 @@ public:
   MOBase::VersionInfo version() const override;
   QList<MOBase::PluginSetting> settings() const override;
 
-  // IPluginTool
   QString displayName() const override;
   QString tooltip() const override;
   QIcon icon() const override;
@@ -34,8 +29,4 @@ public Q_SLOTS:
 
 private:
   MOBase::IOrganizer* m_organizer = nullptr;
-  std::shared_ptr<BG3LocalizationContent> m_localizationContent;
-  bool m_contentFeatureRegistered = false;
-
-  void registerLocalizationContentFeature();
 };
