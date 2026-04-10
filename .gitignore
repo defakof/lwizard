@@ -1,0 +1,7 @@
+vsbuild/
+build/
+*.dll
+*.exp
+*.ilk
+*.pdb
+.vs/

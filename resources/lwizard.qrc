@@ -1,0 +1,10 @@
+<!DOCTYPE RCC>
+<RCC version="1.0">
+  <qresource prefix="/lwizard">
+    <file>1_embedded.ico</file>
+    <file>2_installed.ico</file>
+    <file>3_available.ico</file>
+    <file>4_outdated.ico</file>
+    <file>5_unavailable.ico</file>
+  </qresource>
+</RCC>

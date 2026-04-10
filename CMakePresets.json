@@ -1,0 +1,53 @@
+{
+  "version": 4,
+  "configurePresets": [
+    {
+      "name": "cmake-dev",
+      "hidden": true,
+      "cacheVariables": {
+        "CMAKE_CXX_FLAGS": "/EHsc /MP /W4"
+      }
+    },
+    {
+      "name": "vcpkg-toolchain",
+      "hidden": true,
+      "toolchainFile": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": {
+          "type": "STRING",
+          "value": "x64-windows-static-md"
+        }
+      }
+    },
+    {
+      "name": "vs18-buildtools",
+      "displayName": "VS 18 2026 + v145 + vcpkg (matches modorganizer-uibase build)",
+      "inherits": ["cmake-dev", "vcpkg-toolchain"],
+      "generator": "Visual Studio 18 2026",
+      "toolset": "v145",
+      "architecture": {
+        "strategy": "set",
+        "value": "x64"
+      },
+      "binaryDir": "${sourceDir}/vsbuild",
+      "cacheVariables": {
+        "CMAKE_PREFIX_PATH": {
+          "type": "PATH",
+          "value": "$env{QT_ROOT};${sourceDir}/../uibase_install/lib"
+        },
+        "CMAKE_INSTALL_PREFIX": {
+          "type": "PATH",
+          "value": "${sourceDir}/../Mod Organizer"
+        }
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "vs18-buildtools",
+      "configurePreset": "vs18-buildtools",
+      "configuration": "RelWithDebInfo",
+      "resolvePackageReferences": "on"
+    }
+  ]
+}
