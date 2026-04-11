@@ -1,76 +1,133 @@
 # LWizard
 
-**LWizard** is a native C++ plugin for [Mod Organizer 2](https://github.com/ModOrganizer2/modorganizer) (**2.5.2**), aimed at **Baldur’s Gate 3** workflows. It extends MO2 with game-specific tooling (for example, localization-related **ModDataContent** integration and BG3-oriented helpers).
+LWizard is a native C++ plugin for [Mod Organizer 2](https://github.com/ModOrganizer2/modorganizer) 2.5.2, focused on Baldur's Gate 3 workflows.
 
-## What this plugin does
+It currently provides:
 
-These behaviors match the current source code (not a roadmap).
+- a Tools submenu with the main LWizard dialog and an Unpack mod helper
+- BG3 localization scanning for the MO2 Content column
+- persistent scan caching keyed by language and file fingerprints
+- translation/base pairing metadata with Content-column tooltips
+- linked-row highlighting in the MO2 mod list
 
-- **Tools menu (`IPluginTool`) — submenu**  
-  MO2 groups tools whose `displayName()` contains `/` (e.g. **LWizard/Menu**, **LWizard/Unpack mod**). **Menu** opens the main dialog: a **Settings** tab (target localization language, **Save**, **Scan mods**) and a **Logs** tab that streams the plugin’s own log buffer (with **Clear**). **Unpack mod** lets you pick a mod and run **Divine** `extract-package` on every `.pak` under that mod, extracting beside each archive (destination = the folder containing the `.pak`, with `--use-package-name`).
+## What it does
 
-- **Content column (`ModDataContent`)**  
-  After startup, once the UI is ready, the plugin registers a **ModDataContent** feature for Baldur’s Gate 3 (via the managed game, or the game id `baldursgate3`). It defines five content types with distinct icons: embedded translation, separate installed translation, available on Nexus, installed but outdated, and none found. **Only the “embedded in mod data” path is implemented today:** detection looks for `Localization/<language>/` on disk or inside `.pak` files. **Separate-mod / Nexus / outdated states are not implemented yet** — the scanner does not assign those categories, so in practice you will see either the embedded icon or the “not available” icon after a scan.
+### Tools menu
 
-- **Localization scan**  
-  **Scan mods** runs on a **background thread** over **valid** mods only. For each mod it checks unpacked folders and `.pak` files. Reading `.pak` contents uses **Norbyte’s LSLib** command-line tool **`Divine.exe`** (`list-package` for BG3). If `Divine.exe` is missing, the plugin tries to **download** the official LSLib release ZIP (pinned version in code) with **PowerShell**, extract the `Tools` binaries into **`plugins/lwizard/`**, and use that copy. It also picks up `Divine.exe` from the unofficial BG3 MO2 plugin layout (`basic_games/.../baldursgate3/tools/`) or any path under **`plugins/`** if already present.
+LWizard registers two `IPluginTool` entries under the `LWizard/` submenu:
 
-- **Language setting**  
-  The plugin exposes an MO2 setting **“Localization language to scan for in BG3 mods”** (and the dialog mirrors it). The same value drives scanning and cache keys.
+- `LWizard/Menu` opens the main dialog
+- `LWizard/Unpack mod` extracts `.pak` archives from a selected mod with Divine
 
-- **Cache and refresh**  
-  Per-mod results are **cached** after a scan. The cache is **cleared** when MO2 performs a refresh cycle and when the language setting changes, so the Content column does not show LWizard icons until you run **Scan mods** again. When a scan finishes, the plugin triggers a **soft MO2 refresh** so the Content column can re-query the new cache.
+The main dialog currently has:
+
+- a **Settings** tab with the target localization language, an optional "cache only current language" switch, and a **Scan mods** button
+- a **Logs** tab showing the plugin log buffer
+
+Language changes are saved immediately through MO2 plugin settings.
+
+### Content column integration
+
+After MO2 finishes initializing its UI, LWizard registers a BG3 `ModDataContent` feature and contributes these Content-column states:
+
+1. Embedded translation
+2. Installed / redundant
+3. Available on Nexus
+4. Outdated
+5. Not available
+6. Translation mod
+
+The implemented paths today are:
+
+- embedded localization found directly in the mod
+- translation-pack detection by UUID overlap across localization data
+- fallback name matching for some XML-only translation packs
+- base-mod classification when a separate translation mod is installed for it
+
+The Nexus availability and outdated states are still placeholders for a later pipeline.
+
+### Translation pairing UI
+
+For paired translation mods and their base mods, LWizard patches MO2's existing `modList` view at runtime through Qt only:
+
+- the Content cell keeps MO2's normal icon rendering
+- hovering the Content cell shows a custom tooltip such as `Translation for: <base mod>` or `Separate translation installed: <translation mod>`
+- selecting one side of a pair highlights both rows
+- translation mods are tinted pastel blue
+- original/base mods are tinted pastel magenta
+
+Highlighting is selection-driven and clears when the selection clears.
+
+## Localization scan behavior
+
+The scan runs on a background thread over valid mods only.
+
+For each mod, LWizard can inspect:
+
+- unpacked `Localization/<language>/...` folders
+- unpacked localization under `PAK_FILES/...`
+- `.pak` archives discovered in the mod root and under `PAK_FILES/`
+
+When `.pak` inspection is needed, LWizard uses Norbyte's `Divine.exe` (`list-package`, `extract-single-file`, `convert-loca`).
+
+The scanner also builds embedded string maps so it can compare localization UUID sets across languages and across mods.
+
+## Cache behavior
+
+LWizard persists two caches through MO2:
+
+- a per-mod scan cache with content state, fingerprint, and translation-pair metadata
+- a per-mod embedded-strings cache used for UUID comparison
+
+Important details:
+
+- cache entries are keyed by the selected language
+- entries are reused only when the localization fingerprint still matches disk
+- missing mods are pruned from cache
+- if "cache only current language" is enabled, other languages are removed from persistent storage
+- old cache entries without translation-pair metadata are ignored and refreshed by the next scan
 
 ## Requirements
 
 | Component | Notes |
-|-----------|--------|
-| **MO2** | 2.5.2 portable (or equivalent); `uibase.dll` at runtime |
-| **Compiler** | **MSVC** x64 — this tree targets **Visual Studio 18 2026** with toolset **v145** (see `CMakePresets.json`) |
-| **Qt** | **6.7.3** `msvc2022_64` — set **`QT_ROOT`** to the kit root (e.g. `D:\Qt\6.7.3\msvc2022_64`) |
-| **vcpkg** | **`VCPKG_ROOT`** set; on **PATH** |
-| **mo2-uibase** | Headers + `uibase.lib` from building [modorganizer-uibase](https://github.com/ModOrganizer2/modorganizer-uibase) at tag **`v2.5.2`** (must match MO2’s `uibase.dll`) |
-
-Install the built uibase CMake package so this project can resolve it. By default, **`CMakeLists.txt`** and the **`vs18-buildtools`** preset expect:
-
-- **`../uibase_install/lib/cmake/mo2-uibase`** (relative to this folder), and  
-- **`CMAKE_PREFIX_PATH`** including **`../uibase_install/lib`** and **`$env:QT_ROOT`**.
-
-Adjust `mo2-uibase_DIR` or `CMAKE_PREFIX_PATH` if your layout differs.
+|-----------|-------|
+| MO2 | 2.5.2 portable (or equivalent) |
+| Compiler | MSVC x64, currently configured for Visual Studio 18 2026 with toolset v145 |
+| Qt | 6.7.3 `msvc2022_64` |
+| vcpkg | `VCPKG_ROOT` configured |
+| mo2-uibase | Built from `modorganizer-uibase` tag `v2.5.2` to match MO2's `uibase.dll` |
 
 ## Build
 
-From a **Developer PowerShell** (or environment where MSVC and CMake are available):
+From a Developer PowerShell:
 
 ```powershell
-$env:QT_ROOT = "D:\Qt\6.7.3\msvc2022_64"   # your Qt 6.7.3 kit
-$env:VCPKG_ROOT = "C:\vcpkg"               # your vcpkg root
+$env:QT_ROOT = "D:\Qt\6.7.3\msvc2022_64"
+$env:VCPKG_ROOT = "C:\vcpkg"
 
 cd lwizard
 cmake --preset vs18-buildtools
-cmake --build vsbuild --preset vs18-buildtools
+cmake --build --preset vs18-buildtools
 cmake --install vsbuild --config RelWithDebInfo
 ```
 
-The **`vs18-buildtools`** preset sets `CMAKE_INSTALL_PREFIX` to **`../Mod Organizer`** by default. Change `CMakePresets.json` (or override at configure time) so `cmake --install` deploys **`lwizard.dll`** and **`lwizard_unpack.dll`** into your MO2 **`plugins/`** tree.
+The default install prefix in `CMakePresets.json` points at `../Mod Organizer`, so install will deploy plugin DLLs into the local MO2 portable tree.
 
 ## Repository layout
 
 | Path | Purpose |
 |------|---------|
-| `src/` | C++ sources and headers |
-| `resources/` | Qt resources (e.g. `lwizard.qrc`) |
-| `CMakeLists.txt` | Plugin target, `mo2_configure_plugin` / `mo2_install_plugin` |
-| `CMakePresets.json` | `vs18-buildtools` + vcpkg toolchain |
-| `vcpkg.json` | **`mo2-cmake`** (MO2 CMake helpers) |
-
-Build trees **`vsbuild/`** and **`build/`** are gitignored.
+| `src/` | Plugin source files |
+| `resources/` | Qt resources and icons |
+| `CMakeLists.txt` | Targets and install rules |
+| `CMakePresets.json` | Local configure/build presets |
+| `vcpkg.json` | CMake helper dependency |
 
 ## References
 
-- MO2 plugin API (**uibase**): [modorganizer-uibase](https://github.com/ModOrganizer2/modorganizer-uibase)  
-- MO2 wiki — [Writing Mod Organizer Plugins](https://github.com/ModOrganizer2/modorganizer/wiki/Writing-Mod-Organizer-Plugins)  
+- [modorganizer-uibase](https://github.com/ModOrganizer2/modorganizer-uibase)
+- [Writing Mod Organizer Plugins](https://github.com/ModOrganizer2/modorganizer/wiki/Writing-Mod-Organizer-Plugins)
 
 ## License
 
-Add a `LICENSE` file if you publish this repository publicly.
+Add a `LICENSE` file before publishing the repository publicly.

@@ -24,7 +24,6 @@ target_sources(lwizard_common PRIVATE
   src/lwizard_divine.h
   src/lwizard_log.cpp
   src/lwizard_log.h
-  resources/lwizard.qrc
 )
 set_target_properties(lwizard_common PROPERTIES
   POSITION_INDEPENDENT_CODE ON
@@ -35,11 +34,15 @@ target_link_libraries(lwizard_common PRIVATE mo2::uibase Qt6::Widgets)
 add_library(lwizard SHARED)
 mo2_configure_plugin(lwizard WARNINGS ON TRANSLATIONS OFF NO_SOURCES)
 target_sources(lwizard PRIVATE
+  src/lwizard_modlist_ui_patch.cpp
+  src/lwizard_modlist_ui_patch.h
   src/lwizard_plugin.cpp
   src/lwizard_plugin.h
   src/lwizard_window.cpp
   src/lwizard_window.h
+  resources/lwizard.qrc
 )
+set_target_properties(lwizard PROPERTIES AUTORCC ON)
 target_link_libraries(lwizard PRIVATE lwizard_common mo2::uibase Qt6::Widgets)
 
 mo2_install_plugin(lwizard)

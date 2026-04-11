@@ -7,6 +7,7 @@
 #include <uibase/versioninfo.h>
 
 class BG3LocalizationContent;
+class LWizardModListUiPatch;
 
 class LWizardPlugin : public MOBase::IPluginTool
 {
@@ -35,6 +36,7 @@ public Q_SLOTS:
 private:
   MOBase::IOrganizer* m_organizer = nullptr;
   std::shared_ptr<BG3LocalizationContent> m_localizationContent;
+  std::unique_ptr<LWizardModListUiPatch> m_modListUiPatch;
   bool m_contentFeatureRegistered = false;
 
   void registerLocalizationContentFeature();

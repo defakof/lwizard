@@ -2,6 +2,7 @@
 #include "bg3_localization_content.h"
 #include "lwizard_log.h"
 
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFormLayout>
@@ -10,6 +11,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QScrollBar>
+#include <QSignalBlocker>
 #include <QTabWidget>
 #include <QTextEdit>
 #include <QVBoxLayout>
@@ -78,25 +80,44 @@ void LWizardWindow::buildSettingsTab(QTabWidget* tabs)
   m_languageCombo = new QComboBox(grp);
   m_languageCombo->addItems(k_languages);
 
-  const QString saved = currentSavedLanguage();
-  const int idx       = k_languages.indexOf(saved);
-  m_languageCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+  {
+    QSignalBlocker block(m_languageCombo);
+    const QString saved = currentSavedLanguage();
+    const int idx       = k_languages.indexOf(saved);
+    m_languageCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+  }
 
   form->addRow(tr("Language to scan for:"), m_languageCombo);
+
+  m_cacheOnlyCurrentLang = new QCheckBox(
+      tr("Persist scan cache only for that language (removes other languages from disk "
+         "when the cache is saved or when you enable this)."),
+      grp);
+  {
+    QSignalBlocker block(m_cacheOnlyCurrentLang);
+    const QVariant cacheOnly =
+        m_organizer->pluginSetting(QStringLiteral("lwizard"),
+                                   QStringLiteral("cache_only_current_language"));
+    m_cacheOnlyCurrentLang->setChecked(cacheOnly.isValid() ? cacheOnly.toBool() : false);
+  }
+  form->addRow(tr("Disk cache:"), m_cacheOnlyCurrentLang);
+
   layout->addWidget(grp);
 
-  // Button row: Save + Scan
-  auto* saveBtn = new QPushButton(tr("Save"), page);
-  m_scanBtn     = new QPushButton(tr("Scan mods"), page);
+  connect(m_languageCombo, &QComboBox::currentIndexChanged, this,
+          &LWizardWindow::saveSettings);
+  connect(m_cacheOnlyCurrentLang, &QCheckBox::toggled, this,
+          &LWizardWindow::onCacheOnlyCurrentLangToggled);
+
+  // Scan button row
+  m_scanBtn = new QPushButton(tr("Scan mods"), page);
 
   auto* btnRow = new QHBoxLayout;
   btnRow->addStretch();
-  btnRow->addWidget(saveBtn);
   btnRow->addWidget(m_scanBtn);
   layout->addLayout(btnRow);
   layout->addStretch();
 
-  connect(saveBtn,   &QPushButton::clicked, this, &LWizardWindow::saveSettings);
   connect(m_scanBtn, &QPushButton::clicked, this, &LWizardWindow::startScan);
   connect(m_content.get(), &BG3LocalizationContent::scanFinished,
           this, &LWizardWindow::onScanFinished);
@@ -179,6 +200,13 @@ void LWizardWindow::saveSettings()
   m_organizer->setPluginSetting(QStringLiteral("lwizard"), QStringLiteral("language"),
                                 lang);
   LWizardLog::info(QStringLiteral("Language set to: ") + lang);
+}
+
+void LWizardWindow::onCacheOnlyCurrentLangToggled(bool checked)
+{
+  m_organizer->setPluginSetting(QStringLiteral("lwizard"),
+                                QStringLiteral("cache_only_current_language"),
+                                QVariant(checked));
 }
 
 void LWizardWindow::startScan()
