@@ -46,6 +46,10 @@ target_sources(lwizard PRIVATE
   src/lwizard_translation_tab.h
   src/lwizard_ai_translator.cpp
   src/lwizard_ai_translator.h
+  src/lwizard_nexus_api.cpp
+  src/lwizard_nexus_api.h
+  src/lwizard_nexus_tab.cpp
+  src/lwizard_nexus_tab.h
   resources/lwizard.qrc
 )
 set_target_properties(lwizard PROPERTIES AUTORCC ON)

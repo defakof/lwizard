@@ -1,6 +1,7 @@
 #include "lwizard_window.h"
 #include "bg3_localization_content.h"
 #include "lwizard_log.h"
+#include "lwizard_nexus_tab.h"
 #include "lwizard_translation_tab.h"
 
 #include <QCheckBox>
@@ -37,8 +38,10 @@ static const QStringList k_languages = {
 
 LWizardWindow::LWizardWindow(MOBase::IOrganizer* organizer,
                              std::shared_ptr<BG3LocalizationContent> content,
+                             LWizardNexusApi* nexusApi,
                              QWidget* parent)
     : QDialog(parent), m_organizer(organizer), m_content(std::move(content))
+    , m_nexusApi(nexusApi)
 {
   setWindowTitle(tr("LWizard"));
   setMinimumSize(900, 600);
@@ -59,6 +62,7 @@ void LWizardWindow::setupUi()
   m_tabs = new QTabWidget(this);
   buildSettingsTab(m_tabs);
   buildTranslationTab(m_tabs);
+  buildNexusTab(m_tabs);
   buildLogsTab(m_tabs);
   root->addWidget(m_tabs);
 
@@ -131,6 +135,12 @@ void LWizardWindow::buildTranslationTab(QTabWidget* tabs)
 {
   m_translationTab = new TranslationTab(m_organizer, m_content, tabs);
   tabs->addTab(m_translationTab, tr("Translation"));
+}
+
+void LWizardWindow::buildNexusTab(QTabWidget* tabs)
+{
+  m_nexusTab = new NexusTab(m_organizer, m_content, m_nexusApi, tabs);
+  tabs->addTab(m_nexusTab, tr("Nexus Downloads"));
 }
 
 void LWizardWindow::buildLogsTab(QTabWidget* tabs)
@@ -227,7 +237,7 @@ void LWizardWindow::startScan()
   m_scanBtn->setText(tr("Scanning…"));
   // Switch to the Logs tab so the user can see progress
   if (m_tabs)
-    m_tabs->setCurrentIndex(2); // Logs tab
+    m_tabs->setCurrentIndex(3); // Logs tab
 }
 
 void LWizardWindow::onScanFinished()

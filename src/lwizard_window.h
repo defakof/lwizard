@@ -6,6 +6,8 @@
 #include <QPointer>
 
 class BG3LocalizationContent;
+class LWizardNexusApi;
+class NexusTab;
 class QCheckBox;
 class QComboBox;
 class QPushButton;
@@ -30,6 +32,7 @@ class LWizardWindow : public QDialog
 public:
   explicit LWizardWindow(MOBase::IOrganizer* organizer,
                          std::shared_ptr<BG3LocalizationContent> content,
+                         LWizardNexusApi* nexusApi,
                          QWidget* parent = nullptr);
 
 private:
@@ -40,12 +43,15 @@ private:
   QCheckBox*      m_cacheOnlyCurrentLang  = nullptr;
   QPushButton*    m_scanBtn               = nullptr;
   QPointer<QTextEdit> m_logView;
-  TranslationTab* m_translationTab        = nullptr;
+  TranslationTab*   m_translationTab      = nullptr;
+  NexusTab*         m_nexusTab            = nullptr;
+  LWizardNexusApi*  m_nexusApi            = nullptr;
   class QTabWidget* m_tabs                = nullptr;
 
   void setupUi();
   void buildSettingsTab(class QTabWidget* tabs);
   void buildTranslationTab(class QTabWidget* tabs);
+  void buildNexusTab(class QTabWidget* tabs);
   void buildLogsTab(class QTabWidget* tabs);
 
   QString currentSavedLanguage() const;

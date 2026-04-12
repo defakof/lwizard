@@ -100,6 +100,22 @@ public:
   bool hasLinkedMods(const QString& modName) const;
 
   /**
+   * Mark a mod as having translations available on Nexus (updates content state
+   * from CONTENT_UNAVAILABLE → CONTENT_AVAILABLE and stores translation mod IDs).
+   * Thread-safe; emits contentCacheUpdated() on the main thread.
+   */
+  void markNexusAvailable(const QString& modName, const QList<int>& nexusTranslationModIds);
+
+  /** Return stored Nexus translation mod IDs, or empty list if none known. */
+  QList<int> nexusTranslationModIds(const QString& modName) const;
+
+  /**
+   * Return all mod names that are currently CONTENT_UNAVAILABLE for the active language.
+   * Used by the Nexus tab to queue discovery searches.
+   */
+  QStringList unavailableMods() const;
+
+  /**
    * Scan all valid mods on a background thread.
    * Logs results via LWizardLog, emits scanFinished() when done.
    * Returns false if a scan is already running.
@@ -141,6 +157,8 @@ private:
     QString translationTarget;
     QStringList separateTranslations;
     bool relationshipsKnown = false;
+    /** Nexus Mods translation mod IDs discovered by the Nexus tab scanner. */
+    QList<int> nexusTranslationModIds;
   };
   mutable QHash<QString, CacheEntry> m_cache;
   mutable QMutex                     m_cacheMutex;

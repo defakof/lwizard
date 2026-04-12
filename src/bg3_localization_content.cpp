@@ -306,6 +306,52 @@ bool BG3LocalizationContent::hasLinkedMods(const QString& modName) const
   return !linkedModsFor(modName).isEmpty();
 }
 
+void BG3LocalizationContent::markNexusAvailable(const QString& modName,
+                                                 const QList<int>& nexusModIds)
+{
+  const QString lang = currentLanguage();
+  bool changed = false;
+
+  {
+    QMutexLocker lk(&m_cacheMutex);
+    auto it = m_cache.find(modName);
+    if (it != m_cache.end() && it->language == lang) {
+      if (it->contentId == CONTENT_UNAVAILABLE)
+        it->contentId = CONTENT_AVAILABLE;
+      it->nexusTranslationModIds = nexusModIds;
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    LWizardLog::info(
+        QStringLiteral("Nexus: marked '%1' as CONTENT_AVAILABLE (%2 translation mod(s))")
+            .arg(modName).arg(nexusModIds.size()));
+    emit contentCacheUpdated();
+  }
+}
+
+QList<int> BG3LocalizationContent::nexusTranslationModIds(const QString& modName) const
+{
+  QMutexLocker lk(&m_cacheMutex);
+  auto it = m_cache.constFind(modName);
+  if (it != m_cache.constEnd())
+    return it->nexusTranslationModIds;
+  return {};
+}
+
+QStringList BG3LocalizationContent::unavailableMods() const
+{
+  const QString lang = currentLanguage();
+  QMutexLocker  lk(&m_cacheMutex);
+  QStringList   out;
+  for (auto it = m_cache.constBegin(); it != m_cache.constEnd(); ++it) {
+    if (it->language == lang && it->contentId == CONTENT_UNAVAILABLE)
+      out.append(it.key());
+  }
+  return out;
+}
+
 QString BG3LocalizationContent::localizationFingerprint(const QString& modAbsPath) const
 {
   QCryptographicHash hash(QCryptographicHash::Sha256);

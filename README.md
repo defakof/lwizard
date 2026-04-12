@@ -10,6 +10,7 @@ It currently provides:
 - translation/base pairing metadata with Content-column tooltips
 - linked-row highlighting in the MO2 mod list
 - a full **Translation** tab: load mod strings, edit translations, AI-assisted translation via Google Gemini, and export as `.pak` or MO2 mod
+- a **Nexus Downloads** tab: discover translation packs on Nexus Mods and queue downloads into MO2
 
 ## What it does
 
@@ -20,10 +21,11 @@ LWizard registers two `IPluginTool` entries under the `LWizard/` submenu:
 - `LWizard/Menu` opens the main dialog
 - `LWizard/Unpack mod` extracts `.pak` archives from a selected mod with Divine
 
-The main dialog has three tabs:
+The main dialog has four tabs:
 
 - **Settings** — target localization language, optional "cache only current language" switch, **Scan mods** button; language changes saved immediately via MO2 plugin settings
 - **Translation** — full mod string editor and AI translation pipeline (see below)
+- **Nexus Downloads** — manual Nexus translation discovery, optional API key, one-click MO2 download queueing
 - **Logs** — live plugin log buffer
 
 ### Content column integration
@@ -43,8 +45,9 @@ The implemented paths today are:
 - translation-pack detection by UUID overlap across localization data
 - fallback name matching for some XML-only translation packs
 - base-mod classification when a separate translation mod is installed for it
+- Nexus-backed availability updates for mods that scan as unavailable locally but have matching translation pages on Nexus for the active language
 
-The Nexus availability and outdated states are still placeholders for a later pipeline.
+The outdated state is still a placeholder for a later pipeline.
 
 ### Translation tab
 
@@ -68,6 +71,20 @@ Paste a [Google AI Studio](https://aistudio.google.com/) API key once; it is per
 - **Import from Clipboard** — parses the AI's reply from the clipboard (raw JSON, fenced code block, or any text containing the `{"lwizard_translations":{...}}` envelope) and applies translations directly to the table.
 
 Four models are available: Gemini 3 Flash, Gemini 2.5 Flash, Gemini 2.5 Flash Lite, Gemini 3.1 Flash Lite (free-tier quotas vary by model).
+
+### Nexus Downloads tab
+
+The Nexus Downloads tab adds a second translation-discovery path on top of the local scan:
+
+1. It lists all mods in the current profile that have a Nexus mod ID.
+2. **Scan All** or **Scan Selected** scrapes the original mod page on Nexus for translation links matching the currently selected target language.
+3. Without an API key, LWizard still discovers matching translation mod pages and offers **Open Page** actions.
+4. With a personal Nexus Mods API key, LWizard also fetches file metadata, shows version/date/size/category, and enables **Download** plus **Download All Latest** actions through MO2's download manager.
+5. When translations are found, LWizard updates the Content-column cache so mods previously marked **Not available** can move to **Available on Nexus**.
+
+Automatic discovery also runs when MO2 notices a newly installed mod with a Nexus ID. Those searches are queued and processed one at a time so install-time scans do not pile up.
+
+The API key is stored in `plugins/lwizard/nexus_config.json` under the MO2 base path.
 
 ### Translation pairing UI
 
@@ -109,6 +126,7 @@ Important details:
 - missing mods are pruned from cache
 - if "cache only current language" is enabled, other languages are removed from persistent storage
 - old cache entries without translation-pair metadata are ignored and refreshed by the next scan
+- discovered Nexus translation mod IDs are cached with the content state for the active language
 
 ## Requirements
 
@@ -119,6 +137,7 @@ Important details:
 | Qt | 6.7.3 `msvc2022_64` |
 | vcpkg | `VCPKG_ROOT` configured |
 | mo2-uibase | Built from `modorganizer-uibase` tag `v2.5.2` to match MO2's `uibase.dll` |
+| Nexus Mods API key | Optional; enables file metadata and direct downloads in the Nexus Downloads tab |
 
 ## Build
 

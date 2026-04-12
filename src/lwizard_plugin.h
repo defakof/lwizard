@@ -8,6 +8,7 @@
 
 class BG3LocalizationContent;
 class LWizardModListUiPatch;
+class LWizardNexusApi;
 
 class LWizardPlugin : public MOBase::IPluginTool
 {
@@ -33,10 +34,14 @@ public:
 public Q_SLOTS:
   void display() const override;
 
+  /** Shared Nexus API — owned by the plugin (persistent across window open/close). */
+  LWizardNexusApi* nexusApi() const { return m_nexusApi; }
+
 private:
   MOBase::IOrganizer* m_organizer = nullptr;
   std::shared_ptr<BG3LocalizationContent> m_localizationContent;
   std::unique_ptr<LWizardModListUiPatch> m_modListUiPatch;
+  LWizardNexusApi* m_nexusApi = nullptr;
   bool m_contentFeatureRegistered = false;
 
   void registerLocalizationContentFeature();

@@ -3,6 +3,7 @@
 #include "lwizard_divine.h"
 #include "lwizard_log.h"
 #include "lwizard_modlist_ui_patch.h"
+#include "lwizard_nexus_api.h"
 #include "lwizard_window.h"
 
 #include <QMainWindow>
@@ -20,6 +21,20 @@ bool LWizardPlugin::init(MOBase::IOrganizer* organizer)
   m_organizer = organizer;
 
   m_localizationContent = std::make_shared<BG3LocalizationContent>(organizer);
+
+  // Nexus API — persistent, outlives any window instance.
+  m_nexusApi = new LWizardNexusApi(this);
+  // Connect results back to content column (updates CONTENT_UNAVAILABLE → CONTENT_AVAILABLE)
+  QObject::connect(m_nexusApi, &LWizardNexusApi::translationsReady,
+                   [this](const QString& modName, const QList<NexusTranslationFile>& files) {
+                     if (files.isEmpty())
+                       return;
+                     QList<int> modIds;
+                     for (const auto& f : files)
+                       if (!modIds.contains(f.modId))
+                         modIds.append(f.modId);
+                     m_localizationContent->markNexusAvailable(modName, modIds);
+                   });
 
   // After any cache update, trigger a soft MO2 refresh so the Content
   // column re-queries getContentsFor() and picks up the newly cached results.
@@ -39,7 +54,26 @@ bool LWizardPlugin::init(MOBase::IOrganizer* organizer)
       return;
 
     LWizardLog::info(QStringLiteral("Detected newly installed mod: %1").arg(modName));
+
+    // 1. Local PAK/loca scan (existing)
     m_localizationContent->scanModAsync(modName);
+
+    // 2. Nexus translation availability scan (new)
+    //    Only if the mod has a Nexus ID — no-op otherwise.
+    const int nexusId = mod->nexusId();
+    if (nexusId > 0 && m_nexusApi) {
+      // Resolve target language the same way as the rest of the plugin
+      QVariant v = m_organizer->pluginSetting(name(), QStringLiteral("language"));
+      QString lang;
+      if (v.typeId() == QMetaType::QStringList) {
+        const QStringList l = v.toStringList();
+        lang = l.isEmpty() ? QStringLiteral("Russian") : l.first();
+      } else {
+        lang = v.toString();
+        if (lang.isEmpty()) lang = QStringLiteral("Russian");
+      }
+      m_nexusApi->scanModAsync(modName, nexusId, lang);
+    }
   });
 
   // Register ModDataContent after the UI is up (same pattern as mo2-bg3-translation-
@@ -138,7 +172,7 @@ QIcon LWizardPlugin::icon() const
 
 void LWizardPlugin::display() const
 {
-  auto* win = new LWizardWindow(m_organizer, m_localizationContent, parentWidget());
+  auto* win = new LWizardWindow(m_organizer, m_localizationContent, m_nexusApi, parentWidget());
   win->exec();
 }
 
