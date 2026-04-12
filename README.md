@@ -9,6 +9,7 @@ It currently provides:
 - persistent scan caching keyed by language and file fingerprints
 - translation/base pairing metadata with Content-column tooltips
 - linked-row highlighting in the MO2 mod list
+- a full **Translation** tab: load mod strings, edit translations, AI-assisted translation via Google Gemini, and export as `.pak` or MO2 mod
 
 ## What it does
 
@@ -19,12 +20,11 @@ LWizard registers two `IPluginTool` entries under the `LWizard/` submenu:
 - `LWizard/Menu` opens the main dialog
 - `LWizard/Unpack mod` extracts `.pak` archives from a selected mod with Divine
 
-The main dialog currently has:
+The main dialog has three tabs:
 
-- a **Settings** tab with the target localization language, an optional "cache only current language" switch, and a **Scan mods** button
-- a **Logs** tab showing the plugin log buffer
-
-Language changes are saved immediately through MO2 plugin settings.
+- **Settings** — target localization language, optional "cache only current language" switch, **Scan mods** button; language changes saved immediately via MO2 plugin settings
+- **Translation** — full mod string editor and AI translation pipeline (see below)
+- **Logs** — live plugin log buffer
 
 ### Content column integration
 
@@ -45,6 +45,29 @@ The implemented paths today are:
 - base-mod classification when a separate translation mod is installed for it
 
 The Nexus availability and outdated states are still placeholders for a later pipeline.
+
+### Translation tab
+
+The Translation tab provides a self-contained workflow for creating localization mods:
+
+1. Pick any mod from the list (search supported).
+2. Choose source language (default: English) and target language (default: from plugin settings).
+3. Click **Load Strings** — localization strings are extracted in a background thread from unpacked files or `.pak` archives via Divine.
+4. A three-column table shows **UUID | Original | Translation**. The Original column renders BG3 markup (`<LSTag>`, `<br>`, `<b>`/`<i>`/`<s>`) as HTML. The Translation column renders HTML when idle and switches to plain-text editing on double-click.
+5. **Original = Translated** pre-fills empty translation cells with the source text as a starting point.
+6. Translations auto-save to `plugins/lwizard/translations/<modName>_<lang>.json` on every cell edit.
+7. **Export .pak** packs the result into a ready-to-use `.pak` file.
+8. **Export as Mod** creates a complete MO2 mod under `mods/<modName> - <lang>/` with proper `meta.lsx` and packs the localization.
+
+#### AI translation (Google Gemini)
+
+Paste a [Google AI Studio](https://aistudio.google.com/) API key once; it is persisted across sessions.
+
+- **Translate Selected Rows** — sends selected strings to Gemini in batches of 12 with the full existing-translation context as a consistency glossary. Handles HTTP 429 rate limiting automatically (parses retry delay, backs off, retries up to 4 times).
+- **Copy Prompt to Clipboard** — builds a self-contained prompt for the selected rows and copies it to the clipboard. Paste into any AI chat (ChatGPT, Claude, Gemini web, etc.).
+- **Import from Clipboard** — parses the AI's reply from the clipboard (raw JSON, fenced code block, or any text containing the `{"lwizard_translations":{...}}` envelope) and applies translations directly to the table.
+
+Four models are available: Gemini 3 Flash, Gemini 2.5 Flash, Gemini 2.5 Flash Lite, Gemini 3.1 Flash Lite (free-tier quotas vary by model).
 
 ### Translation pairing UI
 

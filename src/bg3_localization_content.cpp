@@ -172,6 +172,26 @@ QStringList normalizedLinkedMods(QStringList mods)
   return out;
 }
 
+QString contentIdLabel(int contentId)
+{
+  switch (contentId) {
+    case BG3LocalizationContent::CONTENT_EMBEDDED:
+      return QStringLiteral("embedded");
+    case BG3LocalizationContent::CONTENT_INSTALLED:
+      return QStringLiteral("installed/redundant");
+    case BG3LocalizationContent::CONTENT_AVAILABLE:
+      return QStringLiteral("available");
+    case BG3LocalizationContent::CONTENT_OUTDATED:
+      return QStringLiteral("outdated");
+    case BG3LocalizationContent::CONTENT_UNAVAILABLE:
+      return QStringLiteral("unavailable");
+    case BG3LocalizationContent::CONTENT_TRANSLATION_MOD:
+      return QStringLiteral("translation-mod");
+    default:
+      return QStringLiteral("unknown");
+  }
+}
+
 }  // namespace
 
 BG3LocalizationContent::BG3LocalizationContent(MOBase::IOrganizer* organizer)
@@ -683,19 +703,69 @@ bool BG3LocalizationContent::cacheOnlyCurrentLanguage() const
   return v.isValid() ? v.toBool() : false;
 }
 
-bool BG3LocalizationContent::scanAll()
+QStringList BG3LocalizationContent::validModNames() const
 {
-  if (m_scanning.exchange(true))
-    return false;  // already running
-
-  const QString language = currentLanguage();
-
-  // Pre-filter to valid (real) mods only, discarding Overwrite/DLC stubs.
   const QStringList allMods = m_organizer->modList()->allMods();
   QStringList       mods;
   for (const QString& name : allMods)
     if (m_organizer->modList()->state(name) & MOBase::IModList::STATE_VALID)
       mods.append(name);
+  return mods;
+}
+
+void BG3LocalizationContent::scanModAsync(const QString& modName)
+{
+  const QString name = modName.trimmed();
+  if (name.isEmpty())
+    return;
+
+  int queuedCount = 0;
+  {
+    auto lock = QMutexLocker(&m_autoScanMutex);
+    if (m_autoScanPending.contains(name)) {
+      LWizardLog::debug(QStringLiteral("Automatic scan already queued: %1").arg(name));
+      return;
+    }
+
+    m_autoScanPending.insert(name);
+    m_autoScanQueue.append(name);
+    queuedCount = m_autoScanQueue.size();
+  }
+
+  LWizardLog::info(QStringLiteral("Queued automatic scan for newly installed mod: %1 "
+                                  "(waiting: %2)")
+                       .arg(name)
+                       .arg(queuedCount));
+
+  QMetaObject::invokeMethod(
+      this, [this]() { startNextQueuedAutoScan(); }, Qt::QueuedConnection);
+}
+
+bool BG3LocalizationContent::scanAll()
+{
+  int clearedQueuedScans = 0;
+  {
+    auto lock = QMutexLocker(&m_autoScanMutex);
+    if (m_scanning.load() || m_autoScanRunning)
+      return false;
+
+    m_scanning.store(true);
+    clearedQueuedScans = m_autoScanQueue.size();
+    if (clearedQueuedScans > 0) {
+      m_autoScanQueue.clear();
+      m_autoScanPending.clear();
+    }
+  }
+
+  const QString language = currentLanguage();
+
+  const QStringList mods = validModNames();
+
+  if (clearedQueuedScans > 0) {
+    LWizardLog::info(
+        QStringLiteral("Manual full scan superseded %1 queued automatic scan(s).")
+            .arg(clearedQueuedScans));
+  }
 
   LWizardLog::info(
       QStringLiteral("Scan started — language: %1, mods: %2").arg(language).arg(mods.size()));
@@ -880,7 +950,9 @@ bool BG3LocalizationContent::scanAll()
         [this]() {
           savePersistentFromMemory();
           m_scanning.store(false);
+          emit contentCacheUpdated();
           emit scanFinished();
+          startNextQueuedAutoScan();
         },
         Qt::QueuedConnection);
   });
@@ -888,6 +960,193 @@ bool BG3LocalizationContent::scanAll()
   QObject::connect(thread, &QThread::finished, thread, &QThread::deleteLater);
   thread->start();
   return true;
+}
+
+BG3LocalizationContent::SingleModScanResult BG3LocalizationContent::computeSingleModScan(
+    const QString& modName, const QString& language) const
+{
+  SingleModScanResult result;
+  result.modName  = modName;
+  result.language = language;
+
+  auto* mod = m_organizer->modList()->getMod(modName);
+  if (!mod) {
+    LWizardLog::warn(
+        QStringLiteral("Automatic scan skipped; mod disappeared before scanning: %1")
+            .arg(modName));
+    return result;
+  }
+
+  if (!(m_organizer->modList()->state(modName) & MOBase::IModList::STATE_VALID)) {
+    LWizardLog::warn(
+        QStringLiteral("Automatic scan skipped; mod is not in a scannable state: %1")
+            .arg(modName));
+    return result;
+  }
+
+  result.valid   = true;
+  result.modPath = mod->absolutePath();
+  result.fingerprint = localizationFingerprint(result.modPath);
+
+  {
+    auto lock = QMutexLocker(&m_cacheMutex);
+    auto cit  = m_cache.constFind(modName);
+    if (cit != m_cache.constEnd() && cit->language == language &&
+        cit->contentId != CONTENT_NONE && !cit->fingerprint.isEmpty() &&
+        cit->fingerprint == result.fingerprint && cit->relationshipsKnown) {
+      result.cacheHit          = true;
+      result.baseContentId     = cit->contentId;
+      result.finalContentId    = cit->contentId;
+      result.translationTarget = cit->translationTarget;
+      return result;
+    }
+  }
+
+  auto tree = mod->fileTree();
+  if (!tree) {
+    result.valid = false;
+    LWizardLog::warn(
+        QStringLiteral("Automatic scan skipped; could not read file tree for %1").arg(modName));
+    return result;
+  }
+
+  result.baseContentId = detectContentId(tree, language);
+  result.uuidKeys      = uuidKeysUnionAllLanguages(result.modPath);
+
+  QHash<QString, int>            scanBaseId;
+  QHash<QString, QSet<QString>> scanUuids;
+  scanBaseId.insert(modName, result.baseContentId);
+  scanUuids.insert(modName, result.uuidKeys);
+
+  const QPair<int, QString> classification =
+      applyTranslationModClassification(modName, result.baseContentId, validModNames(),
+                                        scanBaseId, scanUuids);
+  result.finalContentId    = classification.first;
+  result.translationTarget = classification.second;
+
+  if (result.finalContentId == CONTENT_EMBEDDED)
+    result.embeddedStrings = buildEmbeddedStringsForMod(result.modPath, language);
+
+  return result;
+}
+
+void BG3LocalizationContent::applySingleModScanResult(const SingleModScanResult& result)
+{
+  if (!result.valid) {
+    finishAutoScan(result.modName);
+    return;
+  }
+
+  if (result.cacheHit) {
+    LWizardLog::info(QStringLiteral("Automatic scan cache hit: %1 [%2]")
+                         .arg(result.modName, contentIdLabel(result.finalContentId)));
+    emit contentCacheUpdated();
+    finishAutoScan(result.modName);
+    return;
+  }
+
+  CacheEntry  entry;
+  QStringList linkedTranslations;
+  entry.language          = result.language;
+  entry.contentId         = result.finalContentId;
+  entry.fingerprint       = result.fingerprint;
+  entry.translationTarget = result.translationTarget;
+  entry.relationshipsKnown = true;
+
+  {
+    auto lock = QMutexLocker(&m_cacheMutex);
+
+    // Remove stale backlinks for this mod before writing its refreshed relationship data.
+    for (auto it = m_cache.begin(); it != m_cache.end(); ++it) {
+      if (it.key() == result.modName || it->language != result.language)
+        continue;
+
+      if (it->separateTranslations.removeAll(result.modName) > 0)
+        it->separateTranslations = normalizedLinkedMods(it->separateTranslations);
+    }
+
+    m_cache[result.modName] = entry;
+
+    if (!entry.translationTarget.isEmpty()) {
+      auto refIt = m_cache.find(entry.translationTarget);
+      if (refIt != m_cache.end() && refIt->language == result.language) {
+        refIt->separateTranslations =
+            normalizedLinkedMods(refIt->separateTranslations + QStringList{result.modName});
+        refIt->relationshipsKnown = true;
+        if (refIt->contentId == CONTENT_UNAVAILABLE)
+          refIt->contentId = CONTENT_INSTALLED;
+      }
+    }
+
+    for (auto it = m_cache.constBegin(); it != m_cache.constEnd(); ++it) {
+      if (it.key() == result.modName || it->language != result.language)
+        continue;
+      if (it->translationTarget == result.modName)
+        linkedTranslations.append(it.key());
+    }
+
+    entry.separateTranslations = normalizedLinkedMods(linkedTranslations);
+    if (!entry.separateTranslations.isEmpty() && entry.contentId == CONTENT_UNAVAILABLE)
+      entry.contentId = CONTENT_INSTALLED;
+    m_cache[result.modName] = entry;
+  }
+
+  if (entry.contentId == CONTENT_EMBEDDED && !result.embeddedStrings.isEmpty()) {
+    saveEmbeddedStringsBlob(result.modName, result.language, result.modPath,
+                            result.fingerprint, result.embeddedStrings);
+  }
+
+  savePersistentFromMemory();
+
+  QString suffix;
+  if (!entry.translationTarget.isEmpty()) {
+    suffix = QStringLiteral(" -> %1").arg(entry.translationTarget);
+  } else if (!entry.separateTranslations.isEmpty()) {
+    suffix = QStringLiteral(" (%1 linked translation(s))").arg(entry.separateTranslations.size());
+  }
+
+  LWizardLog::info(QStringLiteral("Automatic scan finished: %1 [%2]%3")
+                       .arg(result.modName, contentIdLabel(entry.contentId), suffix));
+
+  emit contentCacheUpdated();
+  finishAutoScan(result.modName);
+}
+
+void BG3LocalizationContent::finishAutoScan(const QString& modName)
+{
+  {
+    auto lock = QMutexLocker(&m_autoScanMutex);
+    m_autoScanPending.remove(modName);
+    m_autoScanRunning = false;
+  }
+
+  startNextQueuedAutoScan();
+}
+
+void BG3LocalizationContent::startNextQueuedAutoScan()
+{
+  QString modName;
+  {
+    auto lock = QMutexLocker(&m_autoScanMutex);
+    if (m_scanning.load() || m_autoScanRunning || m_autoScanQueue.isEmpty())
+      return;
+
+    modName = m_autoScanQueue.takeFirst();
+    m_autoScanRunning = true;
+  }
+
+  const QString language = currentLanguage();
+  LWizardLog::info(
+      QStringLiteral("Automatic scan started: %1 (language: %2)").arg(modName, language));
+
+  auto* thread = QThread::create([this, modName, language]() {
+    const SingleModScanResult result = computeSingleModScan(modName, language);
+    QMetaObject::invokeMethod(
+        this, [this, result]() { applySingleModScanResult(result); }, Qt::QueuedConnection);
+  });
+
+  QObject::connect(thread, &QThread::finished, thread, &QThread::deleteLater);
+  thread->start();
 }
 
 // ---------------------------------------------------------------------------
@@ -1281,6 +1540,18 @@ BG3LocalizationContent::parseEmbeddedStringsCompressedJson(const QByteArray& com
   for (auto it = obj.begin(); it != obj.end(); ++it)
     out[it.key()] = it->toString();
   return out;
+}
+
+QMap<QString, QString> BG3LocalizationContent::loadStringsSync(const QString& modName,
+                                                               const QString& language) const
+{
+  MOBase::IModInterface* mod = m_organizer->modList()->getMod(modName);
+  if (!mod)
+    return {};
+  const QByteArray compressed = buildEmbeddedStringsForMod(mod->absolutePath(), language);
+  if (compressed.isEmpty())
+    return {};
+  return parseEmbeddedStringsCompressedJson(compressed);
 }
 
 QMap<QString, QString> BG3LocalizationContent::embeddedStringsFor(const QString& modName) const

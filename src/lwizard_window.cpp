@@ -1,6 +1,7 @@
 #include "lwizard_window.h"
 #include "bg3_localization_content.h"
 #include "lwizard_log.h"
+#include "lwizard_translation_tab.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -40,7 +41,7 @@ LWizardWindow::LWizardWindow(MOBase::IOrganizer* organizer,
     : QDialog(parent), m_organizer(organizer), m_content(std::move(content))
 {
   setWindowTitle(tr("LWizard"));
-  setMinimumSize(520, 400);
+  setMinimumSize(900, 600);
   setAttribute(Qt::WA_DeleteOnClose);
   setupUi();
 }
@@ -57,6 +58,7 @@ void LWizardWindow::setupUi()
 
   m_tabs = new QTabWidget(this);
   buildSettingsTab(m_tabs);
+  buildTranslationTab(m_tabs);
   buildLogsTab(m_tabs);
   root->addWidget(m_tabs);
 
@@ -123,6 +125,12 @@ void LWizardWindow::buildSettingsTab(QTabWidget* tabs)
           this, &LWizardWindow::onScanFinished);
 
   tabs->addTab(page, tr("Settings"));
+}
+
+void LWizardWindow::buildTranslationTab(QTabWidget* tabs)
+{
+  m_translationTab = new TranslationTab(m_organizer, m_content, tabs);
+  tabs->addTab(m_translationTab, tr("Translation"));
 }
 
 void LWizardWindow::buildLogsTab(QTabWidget* tabs)
@@ -219,7 +227,7 @@ void LWizardWindow::startScan()
   m_scanBtn->setText(tr("Scanning…"));
   // Switch to the Logs tab so the user can see progress
   if (m_tabs)
-    m_tabs->setCurrentIndex(1);
+    m_tabs->setCurrentIndex(2); // Logs tab
 }
 
 void LWizardWindow::onScanFinished()

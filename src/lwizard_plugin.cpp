@@ -21,14 +21,26 @@ bool LWizardPlugin::init(MOBase::IOrganizer* organizer)
 
   m_localizationContent = std::make_shared<BG3LocalizationContent>(organizer);
 
-  // After a manual scan finishes, trigger a soft MO2 refresh so the Content
+  // After any cache update, trigger a soft MO2 refresh so the Content
   // column re-queries getContentsFor() and picks up the newly cached results.
-  QObject::connect(m_localizationContent.get(), &BG3LocalizationContent::scanFinished,
+  QObject::connect(m_localizationContent.get(), &BG3LocalizationContent::contentCacheUpdated,
                    [this]() {
                      m_organizer->refresh(false);
                      if (m_modListUiPatch)
                        m_modListUiPatch->refreshFromSelection();
                    });
+
+  organizer->modList()->onModInstalled([this](MOBase::IModInterface* mod) {
+    if (!mod || !m_localizationContent)
+      return;
+
+    const QString modName = mod->name().trimmed();
+    if (modName.isEmpty())
+      return;
+
+    LWizardLog::info(QStringLiteral("Detected newly installed mod: %1").arg(modName));
+    m_localizationContent->scanModAsync(modName);
+  });
 
   // Register ModDataContent after the UI is up (same pattern as mo2-bg3-translation-
   // checker’s plugin_content.py). Early init() registration can leave the Content
@@ -151,7 +163,7 @@ QString LWizardPlugin::description() const
 
 MOBase::VersionInfo LWizardPlugin::version() const
 {
-  return MOBase::VersionInfo(0, 2, 7, MOBase::VersionInfo::RELEASE_FINAL);
+  return MOBase::VersionInfo(0, 2, 8, MOBase::VersionInfo::RELEASE_FINAL);
 }
 
 QList<MOBase::PluginSetting> LWizardPlugin::settings() const

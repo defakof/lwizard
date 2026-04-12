@@ -11,7 +11,7 @@ set(mo2-uibase_DIR "${_LWIZARD_UIBASE_CMAKE}" CACHE PATH "mo2-uibase CMake packa
 # Portable MO2 layout: ModOrganizer.exe and plugins/ share the same folder (no bin/).
 set(MO2_INSTALL_IS_BIN ON CACHE BOOL "Install runtime next to ModOrganizer.exe" FORCE)
 
-find_package(Qt6 REQUIRED COMPONENTS Widgets)
+find_package(Qt6 REQUIRED COMPONENTS Widgets Network)
 find_package(mo2-cmake CONFIG REQUIRED)
 find_package(mo2-uibase CONFIG REQUIRED)
 
@@ -40,10 +40,16 @@ target_sources(lwizard PRIVATE
   src/lwizard_plugin.h
   src/lwizard_window.cpp
   src/lwizard_window.h
+  src/lwizard_html_delegate.cpp
+  src/lwizard_html_delegate.h
+  src/lwizard_translation_tab.cpp
+  src/lwizard_translation_tab.h
+  src/lwizard_ai_translator.cpp
+  src/lwizard_ai_translator.h
   resources/lwizard.qrc
 )
 set_target_properties(lwizard PROPERTIES AUTORCC ON)
-target_link_libraries(lwizard PRIVATE lwizard_common mo2::uibase Qt6::Widgets)
+target_link_libraries(lwizard PRIVATE lwizard_common mo2::uibase Qt6::Widgets Qt6::Network)
 
 mo2_install_plugin(lwizard)
 

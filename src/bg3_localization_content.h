@@ -4,12 +4,14 @@
 #include <memory>
 #include <vector>
 
+#include <QByteArray>
 #include <QHash>
 #include <QJsonObject>
 #include <QMap>
 #include <QMutex>
 #include <QObject>
 #include <QPair>
+#include <QSet>
 #include <QString>
 #include <QStringList>
 
@@ -74,6 +76,15 @@ public:
   /** Returns cached embedded UUID->string map for the current language, if present. */
   QMap<QString, QString> embeddedStringsFor(const QString& modName) const;
 
+  /**
+   * Synchronously extract UUID->string map for any language directly from the mod's
+   * files/pak. Does NOT require a prior scanAll(). May invoke Divine.exe for .loca
+   * files — call from a background thread for large mods.
+   * Returns empty map if the mod has no localization for that language.
+   */
+  QMap<QString, QString> loadStringsSync(const QString& modName,
+                                         const QString& language) const;
+
   /** Returns the paired base mod for a translation mod, or an empty string. */
   QString translationTargetFor(const QString& modName) const;
 
@@ -95,12 +106,31 @@ public:
    */
   bool scanAll();
 
+  /** Queue a background scan for a single newly installed mod. */
+  void scanModAsync(const QString& modName);
+
 signals:
+  void contentCacheUpdated();
   void scanFinished();
 
 private:
   MOBase::IOrganizer* m_organizer;
   std::atomic<bool>   m_scanning{false};
+
+  struct SingleModScanResult
+  {
+    QString modName;
+    QString language;
+    QString modPath;
+    QString fingerprint;
+    QString translationTarget;
+    QByteArray embeddedStrings;
+    QSet<QString> uuidKeys;
+    int  baseContentId  = CONTENT_NONE;
+    int  finalContentId = CONTENT_NONE;
+    bool valid          = false;
+    bool cacheHit       = false;
+  };
 
   struct CacheEntry
   {
@@ -115,6 +145,11 @@ private:
   mutable QHash<QString, CacheEntry> m_cache;
   mutable QMutex                     m_cacheMutex;
 
+  mutable QMutex m_autoScanMutex;
+  QStringList    m_autoScanQueue;
+  QSet<QString>  m_autoScanPending;
+  bool           m_autoScanRunning = false;
+
   // Lazily resolved path to Divine.exe; empty = not found.
   mutable QString m_divinePath;
   mutable bool    m_divinePathResolved = false;
@@ -123,6 +158,7 @@ private:
   QString resolvedDivinePath() const;
   QString currentLanguage() const;
   bool    cacheOnlyCurrentLanguage() const;
+  QStringList validModNames() const;
 
   /** Returns CONTENT_EMBEDDED if localization is found, CONTENT_UNAVAILABLE otherwise. */
   int  detectContentId(std::shared_ptr<const MOBase::IFileTree> tree,
@@ -162,6 +198,12 @@ private:
       const QString& modName, int baseContentId, const QStringList& allModNames,
       const QHash<QString, int>& baseIdThisScan,
       const QHash<QString, QSet<QString>>& uuidsThisScan) const;
+
+  SingleModScanResult computeSingleModScan(const QString& modName,
+                                           const QString& language) const;
+  void                applySingleModScanResult(const SingleModScanResult& result);
+  void                finishAutoScan(const QString& modName);
+  void                startNextQueuedAutoScan();
 
   QSet<QString> embeddedUuidKeysUnionFromPersistent(const QString& modName) const;
   CacheEntry entryForCurrentLanguage(const QString& modName) const;
