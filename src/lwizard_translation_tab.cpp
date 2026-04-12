@@ -353,6 +353,9 @@ void TranslationTab::populateModList()
   for (const QString& name : names) {
     if (name.isEmpty())
       continue;
+    auto* mod = modList->getMod(name);
+    if (mod && mod->isSeparator())
+      continue;
     m_modList->addItem(name);
   }
 }

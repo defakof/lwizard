@@ -221,6 +221,8 @@ std::vector<int> BG3LocalizationContent::getContentsFor(
 {
   const QString language = currentLanguage();
   const QString modName  = fileTree->name();
+  if (auto* mod = m_organizer->modList()->getMod(modName); mod && mod->isSeparator())
+    return {};
 
   // Only use cache — icons appear after an explicit scanAll().
   auto lock = QMutexLocker(&m_cacheMutex);
@@ -461,12 +463,17 @@ void BG3LocalizationContent::hydrateMemoryFromPersistent()
     MOBase::IModInterface* mod = m_organizer->modList()->getMod(modName);
     if (!mod)
       continue;
+    if (mod->isSeparator())
+      continue;
     if (mod->absolutePath().compare(storedPath, Qt::CaseInsensitive) != 0)
       continue;
 
     const int     id = langEntry[QStringLiteral("id")].toInt(CONTENT_NONE);
     const QString fp = langEntry[QStringLiteral("fp")].toString();
     if (id == CONTENT_NONE || fp.isEmpty())
+      continue;
+    if (id == CONTENT_UNAVAILABLE &&
+        discoverLanguagesInMod(mod->absolutePath()).isEmpty())
       continue;
 
     const QString liveFp = localizationFingerprint(mod->absolutePath());
@@ -753,9 +760,14 @@ QStringList BG3LocalizationContent::validModNames() const
 {
   const QStringList allMods = m_organizer->modList()->allMods();
   QStringList       mods;
-  for (const QString& name : allMods)
-    if (m_organizer->modList()->state(name) & MOBase::IModList::STATE_VALID)
-      mods.append(name);
+  for (const QString& name : allMods) {
+    if (!(m_organizer->modList()->state(name) & MOBase::IModList::STATE_VALID))
+      continue;
+    auto* mod = m_organizer->modList()->getMod(name);
+    if (mod && mod->isSeparator())
+      continue;
+    mods.append(name);
+  }
   return mods;
 }
 
@@ -871,6 +883,8 @@ bool BG3LocalizationContent::scanAll()
       // language only affects detectContentId (embedded vs unavailable for *this* lang);
       // translation-mod matching needs cross-language handles (e.g. English base vs RUS).
       scanUuids[modName] = uuidKeysUnionAllLanguages(modPath);
+      if (scanUuids[modName].isEmpty())
+        scanBaseId[modName] = CONTENT_NONE;
       LWizardLog::debug(QStringLiteral("  [%1] UUID keys (all languages): %2")
                             .arg(modName)
                             .arg(scanUuids[modName].size()));
@@ -1022,6 +1036,10 @@ BG3LocalizationContent::SingleModScanResult BG3LocalizationContent::computeSingl
             .arg(modName));
     return result;
   }
+  if (mod->isSeparator()) {
+    LWizardLog::debug(QStringLiteral("Automatic scan skipped; separator: %1").arg(modName));
+    return result;
+  }
 
   if (!(m_organizer->modList()->state(modName) & MOBase::IModList::STATE_VALID)) {
     LWizardLog::warn(
@@ -1058,6 +1076,11 @@ BG3LocalizationContent::SingleModScanResult BG3LocalizationContent::computeSingl
 
   result.baseContentId = detectContentId(tree, language);
   result.uuidKeys      = uuidKeysUnionAllLanguages(result.modPath);
+  if (result.uuidKeys.isEmpty()) {
+    result.baseContentId  = CONTENT_NONE;
+    result.finalContentId = CONTENT_NONE;
+    return result;
+  }
 
   QHash<QString, int>            scanBaseId;
   QHash<QString, QSet<QString>> scanUuids;
@@ -1272,6 +1295,10 @@ bool BG3LocalizationContent::pakHasLocalization(const QString& pakPath,
 int BG3LocalizationContent::detectContentId(
     std::shared_ptr<const MOBase::IFileTree> tree, const QString& language) const
 {
+  auto* mod = m_organizer->modList()->getMod(tree->name());
+  if (mod && mod->isSeparator())
+    return CONTENT_NONE;
+
   // 1. Direct check: unpacked mod has Localization/{language}/ at its root
   if (tree->exists(QStringLiteral("Localization/") + language,
                    MOBase::FileTreeEntry::DIRECTORY))
@@ -1292,7 +1319,6 @@ int BG3LocalizationContent::detectContentId(
   }
 
   // 2. Scan .pak files for embedded localization
-  auto* mod = m_organizer->modList()->getMod(tree->name());
   if (mod) {
     const QString modPath = mod->absolutePath();
 
@@ -1315,6 +1341,9 @@ int BG3LocalizationContent::detectContentId(
 
     if (scanPaksInDir(tree, QStringLiteral("")))
       return CONTENT_EMBEDDED;
+
+    if (discoverLanguagesInMod(modPath).isEmpty())
+      return CONTENT_NONE;
   }
 
   // States 1 (INSTALLED), 2 (AVAILABLE), 3 (OUTDATED) require
@@ -1593,6 +1622,8 @@ QMap<QString, QString> BG3LocalizationContent::loadStringsSync(const QString& mo
 {
   MOBase::IModInterface* mod = m_organizer->modList()->getMod(modName);
   if (!mod)
+    return {};
+  if (mod->isSeparator())
     return {};
   const QByteArray compressed = buildEmbeddedStringsForMod(mod->absolutePath(), language);
   if (compressed.isEmpty())
