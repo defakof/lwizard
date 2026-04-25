@@ -1,6 +1,46 @@
 cmake_minimum_required(VERSION 3.22)
 project(lwizard LANGUAGES CXX)
 
+# ---- bg3rustpaklib (Rust staticlib, ffi feature) ----------------------------
+set(BG3RUSTPAKLIB_DIR "${CMAKE_CURRENT_LIST_DIR}/../bg3rustpaklib"
+    CACHE PATH "Path to bg3rustpaklib source directory")
+
+file(GLOB _RUST_MSI_BIN_DIRS LIST_DIRECTORIES true
+    "$ENV{ProgramFiles}/Rust stable MSVC */bin")
+
+find_program(CARGO_EXECUTABLE NAMES cargo cargo.exe REQUIRED
+    HINTS
+      "$ENV{USERPROFILE}/.cargo/bin"
+      "$ENV{HOME}/.cargo/bin"
+      ${_RUST_MSI_BIN_DIRS})
+get_filename_component(_RUST_BIN_DIR "${CARGO_EXECUTABLE}" DIRECTORY)
+if(WIN32)
+    set(_RUST_BUILD_PATH "PATH=${_RUST_BIN_DIR};$ENV{PATH}")
+else()
+    set(_RUST_BUILD_PATH "PATH=${_RUST_BIN_DIR}:$ENV{PATH}")
+endif()
+
+set(_BG3PAK_LIB "${BG3RUSTPAKLIB_DIR}/target/release/bg3rustpaklib.lib")
+
+add_custom_target(bg3rustpaklib_build ALL
+    COMMAND "${CMAKE_COMMAND}" -E env "${_RUST_BUILD_PATH}"
+            "${CARGO_EXECUTABLE}" rustc
+            --release
+            --features ffi
+            --crate-type=staticlib
+            --manifest-path "${BG3RUSTPAKLIB_DIR}/Cargo.toml"
+    COMMENT "Building bg3rustpaklib (Rust staticlib)"
+    BYPRODUCTS "${_BG3PAK_LIB}"
+)
+
+add_library(bg3rustpaklib STATIC IMPORTED GLOBAL)
+set_target_properties(bg3rustpaklib PROPERTIES
+    IMPORTED_LOCATION             "${_BG3PAK_LIB}"
+    INTERFACE_INCLUDE_DIRECTORIES "${BG3RUSTPAKLIB_DIR}/include"
+)
+add_dependencies(bg3rustpaklib bg3rustpaklib_build)
+# ------------------------------------------------------------------------------
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -24,12 +64,19 @@ target_sources(lwizard_common PRIVATE
   src/lwizard_divine.h
   src/lwizard_log.cpp
   src/lwizard_log.h
+  src/lwizard_pak_reader.cpp
+  src/lwizard_pak_reader.h
 )
 set_target_properties(lwizard_common PROPERTIES
   POSITION_INDEPENDENT_CODE ON
   AUTOMOC ON
 )
-target_link_libraries(lwizard_common PRIVATE mo2::uibase Qt6::Widgets)
+target_link_libraries(lwizard_common PRIVATE
+    mo2::uibase Qt6::Widgets
+    bg3rustpaklib
+    # Windows system libs required by the Rust standard library
+    ws2_32 userenv ntdll bcrypt
+)
 
 add_library(lwizard SHARED)
 mo2_configure_plugin(lwizard WARNINGS ON TRANSLATIONS OFF NO_SOURCES)

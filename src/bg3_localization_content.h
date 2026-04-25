@@ -14,7 +14,6 @@
 #include <QSet>
 #include <QString>
 #include <QStringList>
-#include <QTemporaryDir>
 
 #include <uibase/game_features/moddatacontent.h>
 
@@ -82,8 +81,8 @@ public:
 
   /**
    * Synchronously extract UUID->string map for any language directly from the mod's
-   * files/pak. Does NOT require a prior scanAll(). May invoke Divine.exe for .loca
-   * files — call from a background thread for large mods.
+   * files/pak. Does NOT require a prior scanAll(). Uses the in-process PAK
+   * reader for .loca files; call from a background thread for large mods.
    * Returns empty map if the mod has no localization for that language.
    */
   QMap<QString, QString> loadStringsSync(const QString& modName,
@@ -145,16 +144,11 @@ private:
     qint64 uuidMs        = 0;
     qint64 matchMs       = 0;
     qint64 persistMs     = 0;
-    int listPackageSpawns      = 0;
-    int extractPackageSpawns   = 0;
-    int extractSingleSpawns    = 0;
-    int convertLocaSpawns      = 0;
   };
 
   struct PakManifestCache
   {
     QHash<QString, QStringList> entriesByPakPath;
-    QHash<QString, std::shared_ptr<QTemporaryDir>> localizationExtractDirsByPakPath;
   };
 
   struct SingleModScanResult
@@ -192,12 +186,6 @@ private:
   QSet<QString>  m_autoScanPending;
   bool           m_autoScanRunning = false;
 
-  // Lazily resolved path to Divine.exe; empty = not found.
-  mutable QString m_divinePath;
-  mutable bool    m_divinePathResolved = false;
-  mutable QMutex  m_divineMutex;
-
-  QString resolvedDivinePath() const;
   QString currentLanguage() const;
   bool    cacheOnlyCurrentLanguage() const;
   QStringList validModNames() const;
@@ -237,11 +225,6 @@ private:
   QStringList listPakFileEntries(const QString& pakPath,
                                  PakManifestCache* pakManifestCache = nullptr,
                                  ScanMetrics* metrics = nullptr) const;
-  bool        extractPakLocalizationsToDir(const QString& pakPath, const QString& destDir,
-                                           ScanMetrics* metrics = nullptr) const;
-  bool        extractPakEntryToFile(const QString& pakPath, const QString& packagedPath,
-                                   const QString& destAbsFile,
-                                   ScanMetrics* metrics = nullptr) const;
   void        collectPakPathsUnderMod(const QString& modAbsPath, QStringList* outPaks) const;
 
   QSet<QString> uuidKeysFromCompressed(const QByteArray& compressedJson) const;

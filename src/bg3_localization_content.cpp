@@ -1,7 +1,8 @@
 #include "bg3_localization_content.h"
-#include "lwizard_divine.h"
 #include "lwizard_log.h"
+#include "lwizard_pak_reader.h"
 
+#include <QBuffer>
 #include <QCryptographicHash>
 #include <QDir>
 #include <QDirIterator>
@@ -13,10 +14,8 @@
 #include <QJsonObject>
 #include <QMetaObject>
 #include <QMutexLocker>
-#include <QProcess>
 #include <QRegularExpression>
 #include <QSet>
-#include <QTemporaryDir>
 #include <QThread>
 #include <QVariant>
 #include <QXmlStreamReader>
@@ -122,6 +121,24 @@ static QByteArray localizationXmlFileToJsonMapCompressed(const QString& xmlAbsPa
   const QJsonObject out = parseBg3LocalizationXmlContent(&f);
   if (out.isEmpty())
     return {};
+  const QByteArray json = QJsonDocument(out).toJson(QJsonDocument::Compact);
+  return qCompress(json, 9);
+}
+
+static QByteArray localizationXmlBytesToJsonMapCompressed(const QByteArray& xmlBytes)
+{
+  if (xmlBytes.isEmpty())
+    return {};
+
+  QBuffer buffer;
+  buffer.setData(xmlBytes);
+  if (!buffer.open(QIODevice::ReadOnly))
+    return {};
+
+  const QJsonObject out = parseBg3LocalizationXmlContent(&buffer);
+  if (out.isEmpty())
+    return {};
+
   const QByteArray json = QJsonDocument(out).toJson(QJsonDocument::Compact);
   return qCompress(json, 9);
 }
@@ -1141,13 +1158,6 @@ bool BG3LocalizationContent::scanAll()
                   .arg(metrics.uuidMs)
                   .arg(metrics.matchMs)
                   .arg(metrics.persistMs));
-          LWizardLog::info(
-              QStringLiteral("Divine spawns — list-package: %1, extract-package: %2, "
-                             "extract-single-file: %3, convert-loca: %4")
-                  .arg(metrics.listPackageSpawns)
-                  .arg(metrics.extractPackageSpawns)
-                  .arg(metrics.extractSingleSpawns)
-                  .arg(metrics.convertLocaSpawns));
           m_scanning.store(false);
           emit contentCacheUpdated();
           emit scanFinished();
@@ -1381,29 +1391,12 @@ QString BG3LocalizationContent::currentLanguage() const
   return s.isEmpty() ? QStringLiteral("English") : s;
 }
 
-QString BG3LocalizationContent::resolvedDivinePath() const
-{
-  auto lock = QMutexLocker(&m_divineMutex);
-  if (m_divinePathResolved)
-    return m_divinePath;
-
-  m_divinePathResolved = true;
-  m_divinePath         = LWizardDivine::existingExecutable(m_organizer);
-  if (!m_divinePath.isEmpty())
-    LWizardLog::debug(QStringLiteral("Divine.exe found at ") + m_divinePath);
-  else
-    LWizardLog::warn(
-        QStringLiteral("Divine.exe not found — pak localization scanning disabled"));
-  return m_divinePath;
-}
 
 bool BG3LocalizationContent::pakHasLocalization(const QString& pakPath,
                                                  const QString& language,
                                                  PakManifestCache* pakManifestCache,
                                                  ScanMetrics* metrics) const
 {
-  LWizardLog::debug(QStringLiteral("  divine scanning: ") + pakPath);
-
   const QString needle = QStringLiteral("Localization/") + language + QStringLiteral("/");
   for (const QString& entry : listPakFileEntries(pakPath, pakManifestCache, metrics)) {
     if (entry.contains(needle, Qt::CaseInsensitive))
@@ -1877,41 +1870,11 @@ QMap<QString, QString> BG3LocalizationContent::embeddedStringsFor(const QString&
 QByteArray BG3LocalizationContent::locaFileToJsonMapCompressed(const QString& locaAbsPath,
                                                                ScanMetrics* metrics) const
 {
-  const QString divine = resolvedDivinePath();
-  if (divine.isEmpty())
-    return {};
-
-  QTemporaryDir tmp;
-  if (!tmp.isValid())
-    return {};
-
-  const QString xmlPath = tmp.path() + QStringLiteral("/out.xml");
-  if (metrics)
-    ++metrics->convertLocaSpawns;
-
-  QProcess proc;
-  proc.start(divine,
-             {QStringLiteral("-g"), QStringLiteral("bg3"),
-              QStringLiteral("-a"), QStringLiteral("convert-loca"),
-              QStringLiteral("-s"), locaAbsPath,
-              QStringLiteral("-d"), xmlPath});
-  if (!proc.waitForStarted(5000) || !proc.waitForFinished(60000)) {
-    proc.kill();
-    return {};
-  }
-  if (proc.exitCode() != 0)
-    return {};
-
-  QFile f(xmlPath);
+  Q_UNUSED(metrics)
+  QFile f(locaAbsPath);
   if (!f.open(QIODevice::ReadOnly))
     return {};
-
-  const QJsonObject out = parseBg3LocalizationXmlContent(&f);
-  if (out.isEmpty())
-    return {};
-
-  const QByteArray json = QJsonDocument(out).toJson(QJsonDocument::Compact);
-  return qCompress(json, 9);
+  return LWizardPakReader::locaBytesToJsonCompressed(f.readAll());
 }
 
 QByteArray BG3LocalizationContent::mergeJsonMapsCompressed(
@@ -1975,129 +1938,25 @@ QStringList BG3LocalizationContent::listPakFileEntries(const QString& pakPath,
                                                        PakManifestCache* pakManifestCache,
                                                        ScanMetrics* metrics) const
 {
+  Q_UNUSED(metrics)
   if (pakManifestCache) {
     auto it = pakManifestCache->entriesByPakPath.constFind(pakPath);
     if (it != pakManifestCache->entriesByPakPath.constEnd())
       return it.value();
   }
 
-  const QString divine = resolvedDivinePath();
-  if (divine.isEmpty())
-    return {};
-
-  if (metrics)
-    ++metrics->listPackageSpawns;
-
-  QProcess proc;
-  proc.start(divine,
-             {QStringLiteral("-g"), QStringLiteral("bg3"),
-              QStringLiteral("-a"), QStringLiteral("list-package"),
-              QStringLiteral("-s"), pakPath});
-
-  if (!proc.waitForStarted(5000) || !proc.waitForFinished(120000)) {
-    proc.kill();
-    LWizardLog::warn(QStringLiteral("Divine.exe timed out listing package ") + pakPath);
-    return {};
-  }
-
-  if (proc.exitCode() != 0)
-    return {};
-
-  QStringList out;
-  const QString output = QString::fromUtf8(proc.readAllStandardOutput());
-  const QStringList lines = output.split(QChar('\n'), Qt::SkipEmptyParts);
-  for (const QString& line : lines) {
-    const QString name = normalizedPakEntry(line);
-    if (!name.isEmpty())
-      out.append(name);
-  }
+  QStringList entries = LWizardPakReader::listFiles(pakPath);
   if (pakManifestCache)
-    pakManifestCache->entriesByPakPath.insert(pakPath, out);
-  return out;
+    pakManifestCache->entriesByPakPath.insert(pakPath, entries);
+  return entries;
 }
 
-bool BG3LocalizationContent::extractPakLocalizationsToDir(const QString& pakPath,
-                                                          const QString& destDir,
-                                                          ScanMetrics* metrics) const
-{
-  const QString divine = resolvedDivinePath();
-  if (divine.isEmpty())
-    return false;
-
-  if (metrics)
-    ++metrics->extractPackageSpawns;
-
-  QProcess proc;
-  proc.start(divine,
-             {QStringLiteral("-g"), QStringLiteral("bg3"),
-              QStringLiteral("-a"), QStringLiteral("extract-package"),
-              QStringLiteral("-s"), pakPath,
-              QStringLiteral("-d"), destDir,
-              QStringLiteral("-x"), QStringLiteral(R"(Localization[/\\].*\.(loca|xml)$)"),
-              QStringLiteral("--use-regex")});
-
-  if (!proc.waitForStarted(5000) || !proc.waitForFinished(120000)) {
-    proc.kill();
-    LWizardLog::debug(QStringLiteral("  extract-package timed out: ") + pakPath);
-    return false;
-  }
-
-  if (proc.exitCode() != 0) {
-    LWizardLog::debug(QStringLiteral("  extract-package failed (code %1): %2")
-                          .arg(proc.exitCode())
-                          .arg(pakPath));
-    return false;
-  }
-
-  return true;
-}
-
-bool BG3LocalizationContent::extractPakEntryToFile(const QString& pakPath,
-                                                   const QString& packagedPath,
-                                                   const QString& destAbsFile,
-                                                   ScanMetrics* metrics) const
-{
-  const QString divine = resolvedDivinePath();
-  if (divine.isEmpty())
-    return false;
-
-  if (metrics)
-    ++metrics->extractSingleSpawns;
-
-  QProcess proc;
-  proc.start(divine,
-             {QStringLiteral("-g"), QStringLiteral("bg3"),
-              QStringLiteral("-a"), QStringLiteral("extract-single-file"),
-              QStringLiteral("-s"), pakPath,
-              QStringLiteral("-d"), destAbsFile,
-              QStringLiteral("-f"), packagedPath});
-
-  if (!proc.waitForStarted(5000) || !proc.waitForFinished(120000)) {
-    proc.kill();
-    LWizardLog::debug(QStringLiteral("  extract-single-file timed out: ") + packagedPath);
-    return false;
-  }
-
-  if (proc.exitCode() != 0) {
-    LWizardLog::debug(
-        QStringLiteral("  extract-single-file failed (code %1): %2")
-            .arg(proc.exitCode())
-            .arg(packagedPath));
-    return false;
-  }
-
-  return QFile::exists(destAbsFile);
-}
 
 QByteArray BG3LocalizationContent::buildEmbeddedStringsForMod(const QString& modAbsPath,
                                                               const QString& lang,
                                                               PakManifestCache* pakManifestCache,
                                                               ScanMetrics* metrics) const
 {
-  const QString divine = resolvedDivinePath();
-  if (divine.isEmpty())
-    return {}; // can't convert .loca
-
   QList<QByteArray> parts;
 
   auto scanLocaUnder = [&](const QString& baseDir) {
@@ -2149,86 +2008,31 @@ QByteArray BG3LocalizationContent::buildEmbeddedStringsForMod(const QString& mod
     }
   }
 
-  // .loca/.xml inside .pak: extract localization files once per pak, then filter locally.
+  // .loca/.xml inside .pak: read entries directly through bg3rustpaklib.
   QStringList paks;
   collectPakPathsUnderMod(modAbsPath, &paks);
   const QString locNeedle = QStringLiteral("Localization/") + lang + QStringLiteral("/");
 
-  QTemporaryDir pakTmp;
-  if (pakTmp.isValid()) {
-    for (const QString& pakPath : paks) {
-      const QStringList entries = listPakFileEntries(pakPath, pakManifestCache, metrics);
-      bool hasWantedEntry = false;
-      for (const QString& entry : entries) {
-        const QString norm = normalizedPakEntry(entry);
-        if (!norm.contains(locNeedle, Qt::CaseInsensitive))
-          continue;
-        const bool isLoca = norm.endsWith(QStringLiteral(".loca"), Qt::CaseInsensitive);
-        const bool isXml  = norm.endsWith(QStringLiteral(".xml"), Qt::CaseInsensitive);
-        if (isLoca || isXml) {
-          hasWantedEntry = true;
-          break;
-        }
-      }
-      if (!hasWantedEntry)
+  for (const QString& pakPath : paks) {
+    const QStringList entries = listPakFileEntries(pakPath, pakManifestCache, metrics);
+    for (const QString& entry : entries) {
+      const QString norm = normalizedPakEntry(entry);
+      if (!norm.contains(locNeedle, Qt::CaseInsensitive))
         continue;
 
-      QString pakDest;
-      bool    extracted = false;
-      if (pakManifestCache) {
-        auto extractedIt =
-            pakManifestCache->localizationExtractDirsByPakPath.constFind(pakPath);
-        if (extractedIt != pakManifestCache->localizationExtractDirsByPakPath.constEnd() &&
-            extractedIt.value() && extractedIt.value()->isValid()) {
-          pakDest   = extractedIt.value()->path();
-          extracted = true;
-        } else {
-          auto tmp = std::make_shared<QTemporaryDir>();
-          if (tmp->isValid() && extractPakLocalizationsToDir(pakPath, tmp->path(), metrics)) {
-            pakDest   = tmp->path();
-            extracted = true;
-            pakManifestCache->localizationExtractDirsByPakPath.insert(pakPath, tmp);
-          }
-        }
-      } else {
-        pakDest =
-            pakTmp.path() + QChar('/') +
-            QString::fromLatin1(
-                QCryptographicHash::hash(pakPath.toUtf8(), QCryptographicHash::Sha256).toHex());
-        QDir().mkpath(pakDest);
-        extracted = extractPakLocalizationsToDir(pakPath, pakDest, metrics);
-      }
-
-      if (extracted) {
-        scanLocaUnder(pakDest + QStringLiteral("/Localization/") + lang);
-        scanXmlUnder(pakDest + QStringLiteral("/Localization/") + lang);
+      const bool isLoca = norm.endsWith(QStringLiteral(".loca"), Qt::CaseInsensitive);
+      const bool isXml  = norm.endsWith(QStringLiteral(".xml"), Qt::CaseInsensitive);
+      if (!isLoca && !isXml)
         continue;
-      }
 
-      for (const QString& entry : entries) {
-        const QString norm = normalizedPakEntry(entry);
-        if (!norm.contains(locNeedle, Qt::CaseInsensitive))
-          continue;
+      const QByteArray raw = LWizardPakReader::readFile(pakPath, norm);
+      if (raw.isEmpty())
+        continue;
 
-        const bool isLoca = norm.endsWith(QStringLiteral(".loca"), Qt::CaseInsensitive);
-        const bool isXml  = norm.endsWith(QStringLiteral(".xml"), Qt::CaseInsensitive);
-        if (!isLoca && !isXml)
-          continue;
-
-        const QString dest =
-            pakTmp.path() + QChar('/') +
-            QString::fromLatin1(
-                QCryptographicHash::hash(entry.toUtf8(), QCryptographicHash::Sha256).toHex()) +
-            (isLoca ? QStringLiteral(".loca") : QStringLiteral(".xml"));
-        if (!extractPakEntryToFile(pakPath, entry, dest, metrics))
-          continue;
-        const QByteArray one =
-            isLoca ? locaFileToJsonMapCompressed(dest, metrics) :
-                     localizationXmlFileToJsonMapCompressed(dest);
-        if (!one.isEmpty())
-          parts.append(one);
-        QFile::remove(dest);
-      }
+      const QByteArray one = isLoca ? LWizardPakReader::locaBytesToJsonCompressed(raw) :
+                                      localizationXmlBytesToJsonMapCompressed(raw);
+      if (!one.isEmpty())
+        parts.append(one);
     }
   }
 
