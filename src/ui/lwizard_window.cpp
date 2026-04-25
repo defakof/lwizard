@@ -1,8 +1,9 @@
-#include "lwizard_window.h"
-#include "bg3_localization_content.h"
-#include "lwizard_log.h"
-#include "lwizard_nexus_tab.h"
-#include "lwizard_translation_tab.h"
+#include "ui/lwizard_window.h"
+
+#include "core/bg3_localization_content.h"
+#include "core/lwizard_log.h"
+#include "ui/lwizard_nexus_tab.h"
+#include "ui/lwizard_translation_tab.h"
 
 #include <QCheckBox>
 #include <QComboBox>

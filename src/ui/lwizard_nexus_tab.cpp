@@ -1,6 +1,7 @@
-#include "lwizard_nexus_tab.h"
-#include "bg3_localization_content.h"
-#include "lwizard_log.h"
+#include "ui/lwizard_nexus_tab.h"
+
+#include "core/bg3_localization_content.h"
+#include "core/lwizard_log.h"
 
 #include <QApplication>
 #include <QDateTime>

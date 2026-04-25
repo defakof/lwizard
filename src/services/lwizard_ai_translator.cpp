@@ -1,5 +1,6 @@
-#include "lwizard_ai_translator.h"
-#include "lwizard_log.h"
+#include "services/lwizard_ai_translator.h"
+
+#include "core/lwizard_log.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>

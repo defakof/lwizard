@@ -1,7 +1,10 @@
 vsbuild/
 build/
+build-local.bat
+build-local.ps1
 *.dll
 *.exp
 *.ilk
 *.pdb
 .vs/
+.claude/

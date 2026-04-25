@@ -1,6 +1,7 @@
-#include "lwizard_unpack_plugin.h"
-#include "lwizard_divine.h"
-#include "lwizard_unpack_dialog.h"
+#include "plugins/lwizard_unpack_plugin.h"
+
+#include "core/lwizard_divine.h"
+#include "ui/lwizard_unpack_dialog.h"
 
 #include <QMainWindow>
 

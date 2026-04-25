@@ -1,4 +1,4 @@
-#include "lwizard_html_delegate.h"
+#include "ui/lwizard_html_delegate.h"
 
 #include <QAbstractItemModel>
 #include <QApplication>

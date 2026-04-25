@@ -1,10 +1,11 @@
-#include "lwizard_plugin.h"
-#include "bg3_localization_content.h"
-#include "lwizard_divine.h"
-#include "lwizard_log.h"
-#include "lwizard_modlist_ui_patch.h"
-#include "lwizard_nexus_api.h"
-#include "lwizard_window.h"
+#include "plugins/lwizard_plugin.h"
+
+#include "core/bg3_localization_content.h"
+#include "core/lwizard_divine.h"
+#include "core/lwizard_log.h"
+#include "services/lwizard_nexus_api.h"
+#include "ui/lwizard_modlist_ui_patch.h"
+#include "ui/lwizard_window.h"
 
 #include <QMainWindow>
 

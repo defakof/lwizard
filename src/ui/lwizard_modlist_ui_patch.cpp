@@ -1,7 +1,7 @@
-#include "lwizard_modlist_ui_patch.h"
+#include "ui/lwizard_modlist_ui_patch.h"
 
-#include "bg3_localization_content.h"
-#include "lwizard_log.h"
+#include "core/bg3_localization_content.h"
+#include "core/lwizard_log.h"
 
 #include <QAbstractItemModel>
 #include <QEvent>

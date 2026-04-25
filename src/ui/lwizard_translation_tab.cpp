@@ -1,9 +1,10 @@
-#include "lwizard_translation_tab.h"
-#include "bg3_localization_content.h"
-#include "lwizard_ai_translator.h"
-#include "lwizard_divine.h"
-#include "lwizard_html_delegate.h"
-#include "lwizard_log.h"
+#include "ui/lwizard_translation_tab.h"
+
+#include "core/bg3_localization_content.h"
+#include "core/lwizard_divine.h"
+#include "core/lwizard_log.h"
+#include "services/lwizard_ai_translator.h"
+#include "ui/lwizard_html_delegate.h"
 
 #include <QApplication>
 #include <QClipboard>

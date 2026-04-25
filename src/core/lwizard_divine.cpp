@@ -1,5 +1,5 @@
-#include "lwizard_divine.h"
-#include "lwizard_log.h"
+#include "core/lwizard_divine.h"
+#include "core/lwizard_log.h"
 
 #include <QDir>
 #include <QDirIterator>

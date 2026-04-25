@@ -1,5 +1,6 @@
-#include "lwizard_nexus_api.h"
-#include "lwizard_log.h"
+#include "services/lwizard_nexus_api.h"
+
+#include "core/lwizard_log.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>

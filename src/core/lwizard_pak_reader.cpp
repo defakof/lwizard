@@ -1,4 +1,4 @@
-#include "lwizard_pak_reader.h"
+#include "core/lwizard_pak_reader.h"
 
 #include <bg3rustpaklib.h>
 

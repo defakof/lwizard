@@ -1,6 +1,7 @@
-#include "lwizard_unpack_dialog.h"
-#include "lwizard_divine.h"
-#include "lwizard_log.h"
+#include "ui/lwizard_unpack_dialog.h"
+
+#include "core/lwizard_divine.h"
+#include "core/lwizard_log.h"
 
 #include <QComboBox>
 #include <QDesktopServices>

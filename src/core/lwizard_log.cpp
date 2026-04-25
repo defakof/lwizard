@@ -1,4 +1,4 @@
-#include "lwizard_log.h"
+#include "core/lwizard_log.h"
 
 #include <QDateTime>
 #include <QMetaObject>

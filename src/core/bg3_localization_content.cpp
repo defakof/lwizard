@@ -1,6 +1,6 @@
-#include "bg3_localization_content.h"
-#include "lwizard_log.h"
-#include "lwizard_pak_reader.h"
+#include "core/bg3_localization_content.h"
+#include "core/lwizard_log.h"
+#include "core/lwizard_pak_reader.h"
 
 #include <QBuffer>
 #include <QCryptographicHash>
@@ -36,41 +36,6 @@ constexpr int kMinUuidsTranslation = 3;
 constexpr int kMinOverlapAbs       = 2;
 /** |intersection| / |candidate UUIDs| to classify as translation mod. */
 constexpr double kOverlapRecall    = 0.40;
-
-/**
- * When a mod has no .loca UUID overlap (e.g. XML-only localization), pair a translation
- * pack to its base mod by display name if the base has no strings for the scan language.
- */
-static QString guessTranslationBaseModName(const QString& modName, const QStringList& allModNames)
-{
-  static const QStringList kSuffixes = {
-      QStringLiteral(" - Russian Translation"),
-      QStringLiteral(" Russian Translation"),
-      QStringLiteral(" (Russian Translation)"),
-      QStringLiteral(" — Russian Translation"),
-      QStringLiteral(" - RUS"),
-      QStringLiteral(" RUS"),
-      QStringLiteral("_RUS"),
-      QStringLiteral(" - RU"),
-      QStringLiteral(" RU"),
-      QStringLiteral("_RU"),
-      QStringLiteral(" (Russian)"),
-      QStringLiteral(" (RU)"),
-  };
-
-  for (const QString& suf : kSuffixes) {
-    if (!modName.endsWith(suf, Qt::CaseInsensitive))
-      continue;
-    const QString stem = modName.left(modName.size() - suf.size()).trimmed();
-    if (stem.isEmpty())
-      continue;
-    for (const QString& n : allModNames) {
-      if (n.compare(stem, Qt::CaseInsensitive) == 0)
-        return n;
-    }
-  }
-  return {};
-}
 
 /** Parse BG3 localization XML (loca convert output or Mods/**\/Localization/*\/\/*.xml). */
 static QJsonObject parseBg3LocalizationXmlContent(QIODevice* io)
@@ -1667,18 +1632,6 @@ QPair<int, QString> BG3LocalizationContent::applyTranslationModClassification(
           return qMakePair(CONTENT_TRANSLATION_MOD, refName);
         return qMakePair(CONTENT_INSTALLED, refName);
       }
-    }
-  }
-
-  // XML-only / non-loca packs often have no UUID overlap; pair by mod name when the base
-  // mod has no localization for the scan language.
-  const QString nameRef = guessTranslationBaseModName(modName, allModNames);
-  if (!nameRef.isEmpty() && nameRef != modName && baseContentId == CONTENT_EMBEDDED) {
-    const int refBase = resolveRefBase(nameRef);
-    if (refBase == CONTENT_UNAVAILABLE) {
-      LWizardLog::debug(QStringLiteral("  [translation-mod name match] ") + modName +
-                        QStringLiteral(" → ") + nameRef);
-      return qMakePair(CONTENT_TRANSLATION_MOD, nameRef);
     }
   }
 

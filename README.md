@@ -43,7 +43,6 @@ The implemented paths today are:
 
 - embedded localization found directly in the mod
 - translation-pack detection by UUID overlap across localization data
-- fallback name matching for some XML-only translation packs
 - base-mod classification when a separate translation mod is installed for it
 - Nexus-backed availability updates for mods that scan as unavailable locally but have matching translation pages on Nexus for the active language
 
