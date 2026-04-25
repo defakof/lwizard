@@ -1,6 +1,6 @@
 # LWizard
 
-LWizard is a native C++ plugin for [Mod Organizer 2](https://github.com/ModOrganizer2/modorganizer) 2.5.2, focused on Baldur's Gate 3 workflows.
+LWizard is a native C++ plugin for [Mod Organizer 2](https://github.com/ModOrganizer2/modorganizer), focused on Baldur's Gate 3 workflows.
 
 It currently provides:
 
@@ -19,7 +19,7 @@ It currently provides:
 LWizard registers two `IPluginTool` entries under the `LWizard/` submenu:
 
 - `LWizard/Menu` opens the main dialog
-- `LWizard/Unpack mod` extracts `.pak` archives from a selected mod with Divine
+- `LWizard/Unpack mod` extracts `.pak` archives from a selected mod with Divine (LSLib)
 
 The main dialog has four tabs:
 
@@ -55,7 +55,7 @@ The Translation tab provides a self-contained workflow for creating localization
 
 1. Pick any mod from the list (search supported).
 2. Choose source language (default: English) and target language (default: from plugin settings).
-3. Click **Load Strings** — localization strings are extracted in a background thread from unpacked files or `.pak` archives via Divine.
+3. Click **Load Strings** — localization strings are extracted in a background thread from unpacked files or `.pak` archives. `.pak` reads are done in-process via `bg3rustpaklib` (no Divine subprocesses for scanning).
 4. A three-column table shows **UUID | Original | Translation**. The Original column renders BG3 markup (`<LSTag>`, `<br>`, `<b>`/`<i>`/`<s>`) as HTML. The Translation column renders HTML when idle and switches to plain-text editing on double-click.
 5. **Original = Translated** pre-fills empty translation cells with the source text as a starting point.
 6. Translations auto-save to `plugins/lwizard/translations/<modName>_<lang>.json` on every cell edit.
@@ -108,7 +108,8 @@ For each mod, LWizard can inspect:
 - unpacked localization under `PAK_FILES/...`
 - `.pak` archives discovered in the mod root and under `PAK_FILES/`
 
-When `.pak` inspection is needed, LWizard uses Norbyte's `Divine.exe` (`list-package`, `extract-single-file`, `convert-loca`).
+When `.pak` inspection is needed for scanning, LWizard uses an in-process Rust-backed reader (`bg3rustpaklib`) to list and read entries directly.
+`Divine.exe` (LSLib) is still used for packaging/export workflows and for the standalone **Unpack mod** helper.
 
 The scanner also builds embedded string maps so it can compare localization UUID sets across languages and across mods.
 
@@ -132,11 +133,12 @@ Important details:
 
 | Component | Notes |
 |-----------|-------|
-| MO2 | 2.5.2 portable (or equivalent) |
+| MO2 | Current 2.5.x portable layout (or equivalent) |
 | Compiler | MSVC x64, currently configured for Visual Studio 18 2026 with toolset v145 |
 | Qt | 6.7.3 `msvc2022_64` |
+| Rust toolchain | Required to build `bg3rustpaklib` via `cargo` during CMake build |
 | vcpkg | `VCPKG_ROOT` configured |
-| mo2-uibase | Built from `modorganizer-uibase` tag `v2.5.2` to match MO2's `uibase.dll` |
+| mo2-uibase | Build/install `modorganizer-uibase` so `mo2-uibase_DIR` resolves (see `CMakeLists.txt`) |
 | Nexus Mods API key | Optional; enables file metadata and direct downloads in the Nexus Downloads tab |
 
 ## Build
@@ -153,7 +155,11 @@ cmake --build --preset vs18-buildtools
 cmake --install vsbuild --config RelWithDebInfo
 ```
 
-The default install prefix in `CMakePresets.json` points at `../Mod Organizer`, so install will deploy plugin DLLs into the local MO2 portable tree.
+Notes:
+
+- The build invokes `cargo rustc --release --features ffi --crate-type=staticlib` for `../bg3rustpaklib` automatically.
+- `CMakeLists.txt` expects `mo2-uibase` at `../uibase_install/lib/cmake/mo2-uibase`.
+- The default install prefix in `CMakePresets.json` points at `../Mod Organizer`, so install deploys plugin DLLs into that local MO2 portable tree.
 
 ## Repository layout
 
