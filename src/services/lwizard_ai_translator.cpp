@@ -16,14 +16,12 @@
 // Model roster
 // ---------------------------------------------------------------------------
 
-/*static*/ const QList<LWizardAiTranslator::ModelInfo>&
-LWizardAiTranslator::availableModels()
+/*static*/ const QList<LWizardAiTranslator::ModelInfo>& LWizardAiTranslator::availableModels()
 {
   static const QList<ModelInfo> s_models = {
       {QStringLiteral("Gemini 3 Flash (5 RPM, best quality)"),
        QStringLiteral("gemini-3-flash-preview")},
-      {QStringLiteral("Gemini 2.5 Flash (5 RPM, very strong)"),
-       QStringLiteral("gemini-2.5-flash")},
+      {QStringLiteral("Gemini 2.5 Flash (5 RPM, very strong)"), QStringLiteral("gemini-2.5-flash")},
       {QStringLiteral("Gemini 2.5 Flash Lite (10 RPM, good quality)"),
        QStringLiteral("gemini-2.5-flash-lite")},
       {QStringLiteral("Gemini 3.1 Flash Lite (15 RPM, fastest)"),
@@ -37,36 +35,47 @@ LWizardAiTranslator::availableModels()
 // ---------------------------------------------------------------------------
 
 LWizardAiTranslator::LWizardAiTranslator(QObject* parent)
-    : QObject(parent)
-    , m_model(availableModels().constFirst().apiName)
-    , m_nam(new QNetworkAccessManager(this))
+    : QObject(parent),
+      m_model(availableModels().constFirst().apiName),
+      m_nam(new QNetworkAccessManager(this))
 {}
 
-void LWizardAiTranslator::setApiKey(const QString& key) { m_apiKey = key.trimmed(); }
-bool LWizardAiTranslator::hasApiKey() const             { return !m_apiKey.isEmpty(); }
-void LWizardAiTranslator::setModel(const QString& apiName) { m_model = apiName; }
-QString LWizardAiTranslator::model() const                 { return m_model; }
+void LWizardAiTranslator::setApiKey(const QString& key)
+{
+  m_apiKey = key.trimmed();
+}
+bool LWizardAiTranslator::hasApiKey() const
+{
+  return !m_apiKey.isEmpty();
+}
+void LWizardAiTranslator::setModel(const QString& apiName)
+{
+  m_model = apiName;
+}
+QString LWizardAiTranslator::model() const
+{
+  return m_model;
+}
 
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
-void LWizardAiTranslator::translate(
-    const QList<QPair<QString, QString>>& ordered,
-    const QMap<QString, QString>& allOriginals,
-    const QMap<QString, QString>& allTranslated,
-    const QString& targetLang,
-    const QString& sourceLang)
+void LWizardAiTranslator::translate(const QList<QPair<QString, QString>>& ordered,
+                                    const QMap<QString, QString>&         allOriginals,
+                                    const QMap<QString, QString>&         allTranslated,
+                                    const QString&                        targetLang,
+                                    const QString&                        sourceLang)
 {
-  m_cancelled   = false;
-  m_batchIdx    = 0;
-  m_doneItems   = 0;
-  m_retries     = 0;
-  m_totalItems  = ordered.size();
+  m_cancelled     = false;
+  m_batchIdx      = 0;
+  m_doneItems     = 0;
+  m_retries       = 0;
+  m_totalItems    = ordered.size();
   m_allOriginals  = allOriginals;
   m_allTranslated = allTranslated;
-  m_targetLang  = targetLang;
-  m_sourceLang  = sourceLang;
+  m_targetLang    = targetLang;
+  m_sourceLang    = sourceLang;
 
   // Split into batches
   m_batches.clear();
@@ -92,16 +101,15 @@ void LWizardAiTranslator::cancel()
 // Clipboard prompt / import
 // ---------------------------------------------------------------------------
 
-QString LWizardAiTranslator::buildClipboardPrompt(
-    const QList<QPair<QString, QString>>& selected,
-    const QMap<QString, QString>& allOriginals,
-    const QMap<QString, QString>& allTranslated,
-    const QString& targetLang,
-    const QString& sourceLang) const
+QString LWizardAiTranslator::buildClipboardPrompt(const QList<QPair<QString, QString>>& selected,
+                                                  const QMap<QString, QString>& allOriginals,
+                                                  const QMap<QString, QString>& allTranslated,
+                                                  const QString&                targetLang,
+                                                  const QString&                sourceLang) const
 {
   // Temporarily set state so the private helpers work without a full translate() call
-  const_cast<LWizardAiTranslator*>(this)->m_targetLang  = targetLang;
-  const_cast<LWizardAiTranslator*>(this)->m_sourceLang  = sourceLang;
+  const_cast<LWizardAiTranslator*>(this)->m_targetLang    = targetLang;
+  const_cast<LWizardAiTranslator*>(this)->m_sourceLang    = sourceLang;
   const_cast<LWizardAiTranslator*>(this)->m_allOriginals  = allOriginals;
   const_cast<LWizardAiTranslator*>(this)->m_allTranslated = allTranslated;
 
@@ -110,47 +118,43 @@ QString LWizardAiTranslator::buildClipboardPrompt(
 
   // ── Assemble a single self-contained prompt ───────────────────────────────
   QString out;
-  out += QStringLiteral(
-      "════════════════════════════════════════════════════════════\n"
-      "  BG3 MOD TRANSLATION REQUEST — DO NOT MODIFY THIS HEADER\n"
-      "════════════════════════════════════════════════════════════\n\n");
+  out += QStringLiteral("════════════════════════════════════════════════════════════\n"
+                        "  BG3 MOD TRANSLATION REQUEST — DO NOT MODIFY THIS HEADER\n"
+                        "════════════════════════════════════════════════════════════\n\n");
 
   out += sys;
 
-  out += QStringLiteral(
-      "\n\n════════════════════════════════════════════════════════════\n"
-      "  TRANSLATION TASK\n"
-      "════════════════════════════════════════════════════════════\n\n");
+  out += QStringLiteral("\n\n════════════════════════════════════════════════════════════\n"
+                        "  TRANSLATION TASK\n"
+                        "════════════════════════════════════════════════════════════\n\n");
 
   out += user;
 
-  out += QStringLiteral(
-      "\n\n════════════════════════════════════════════════════════════\n"
-      "  MANDATORY RESPONSE FORMAT\n"
-      "════════════════════════════════════════════════════════════\n"
-      "Your ENTIRE response must be exactly this JSON — nothing before,\n"
-      "nothing after, no markdown, no explanation:\n\n"
-      "{\n"
-      "  \"lwizard_translations\": {\n"
-      "    \"<contentuid>\": \"<translated text>\",\n"
-      "    \"<contentuid>\": \"<translated text>\"\n"
-      "  }\n"
-      "}\n\n"
-      "• Every UUID from the STRINGS TO TRANSLATE section must appear.\n"
-      "• Values are the translated strings with all markup preserved.\n"
-      "• Do NOT wrap the JSON in ``` fences.\n"
-      "• Do NOT add any text outside the JSON object.\n"
-      "════════════════════════════════════════════════════════════\n");
+  out += QStringLiteral("\n\n════════════════════════════════════════════════════════════\n"
+                        "  MANDATORY RESPONSE FORMAT\n"
+                        "════════════════════════════════════════════════════════════\n"
+                        "Your ENTIRE response must be exactly this JSON — nothing before,\n"
+                        "nothing after, no markdown, no explanation:\n\n"
+                        "{\n"
+                        "  \"lwizard_translations\": {\n"
+                        "    \"<contentuid>\": \"<translated text>\",\n"
+                        "    \"<contentuid>\": \"<translated text>\"\n"
+                        "  }\n"
+                        "}\n\n"
+                        "• Every UUID from the STRINGS TO TRANSLATE section must appear.\n"
+                        "• Values are the translated strings with all markup preserved.\n"
+                        "• Do NOT wrap the JSON in ``` fences.\n"
+                        "• Do NOT add any text outside the JSON object.\n"
+                        "════════════════════════════════════════════════════════════\n");
 
   return out;
 }
 
-/*static*/ QMap<QString, QString>
-LWizardAiTranslator::importFromClipboardText(const QString& text)
+/*static*/ QMap<QString, QString> LWizardAiTranslator::importFromClipboardText(const QString& text)
 {
   // Helper: parse the JSON object and look for our envelope key
   auto tryParse = [](const QString& s) -> QMap<QString, QString> {
-    QJsonParseError pe;
+    QJsonParseError     pe;
     const QJsonDocument doc = QJsonDocument::fromJson(s.toUtf8(), &pe);
     if (pe.error != QJsonParseError::NoError || !doc.isObject())
       return {};
@@ -176,18 +180,19 @@ LWizardAiTranslator::importFromClipboardText(const QString& text)
   // Level 1: entire text is the JSON object
   {
     auto r = tryParse(text.trimmed());
-    if (!r.isEmpty()) return r;
+    if (!r.isEmpty())
+      return r;
   }
 
   // Level 2: ```json ... ``` or ``` ... ``` fence
   {
-    static const QRegularExpression fenceRe(
-        QStringLiteral("```(?:json)?\\s*([\\s\\S]*?)```"),
-        QRegularExpression::CaseInsensitiveOption);
-    const auto m = fenceRe.match(text);
+    static const QRegularExpression fenceRe(QStringLiteral("```(?:json)?\\s*([\\s\\S]*?)```"),
+                                            QRegularExpression::CaseInsensitiveOption);
+    const auto                      m = fenceRe.match(text);
     if (m.hasMatch()) {
       auto r = tryParse(m.captured(1).trimmed());
-      if (!r.isEmpty()) return r;
+      if (!r.isEmpty())
+        return r;
     }
   }
 
@@ -197,7 +202,8 @@ LWizardAiTranslator::importFromClipboardText(const QString& text)
     const int last  = text.lastIndexOf(QChar('}'));
     if (first != -1 && last > first) {
       auto r = tryParse(text.mid(first, last - first + 1));
-      if (!r.isEmpty()) return r;
+      if (!r.isEmpty())
+        return r;
     }
   }
 
@@ -213,10 +219,12 @@ QString LWizardAiTranslator::buildSystemPrompt() const
   const QString lang = m_targetLang;
 
   return QStringLiteral(
-R"(You are a professional video game localizer specializing in Baldur's Gate 3 (BG3) — a D&D 5th Edition RPG by Larian Studios.
+             R"(You are a professional video game localizer specializing in Baldur's Gate 3 (BG3) — a D&D 5th Edition RPG by Larian Studios.
 
-TARGET LANGUAGE: )") + lang + QStringLiteral(R"(
-SOURCE LANGUAGE: )") + m_sourceLang + QStringLiteral(R"(
+TARGET LANGUAGE: )") +
+         lang + QStringLiteral(R"(
+SOURCE LANGUAGE: )") +
+         m_sourceLang + QStringLiteral(R"(
 
 ══════════════════════════════════════════════════════════
 MARKUP PRESERVATION — ABSOLUTE REQUIREMENT
@@ -344,8 +352,7 @@ TRANSLATION QUALITY GUIDELINES
 )");
 }
 
-QString LWizardAiTranslator::buildUserMessage(
-    const QList<QPair<QString, QString>>& batch) const
+QString LWizardAiTranslator::buildUserMessage(const QList<QPair<QString, QString>>& batch) const
 {
   QString msg;
 
@@ -361,24 +368,23 @@ QString LWizardAiTranslator::buildUserMessage(
   int ctxCount = 0;
   // Iterate in the same order the map was built (insertion order not guaranteed,
   // but we just want a representative sample — favour shorter strings first).
-  QList<QPair<QString,QString>> ctxPairs;
+  QList<QPair<QString, QString>> ctxPairs;
   for (auto it = m_allTranslated.constBegin();
        it != m_allTranslated.constEnd() && ctxCount < kMaxContextPairs;
-       ++it, ++ctxCount)
-  {
+       ++it, ++ctxCount) {
     const QString& orig  = m_allOriginals.value(it.key());
     const QString& trans = it.value();
     if (!orig.isEmpty() && !trans.isEmpty())
       ctxPairs.append({orig, trans});
   }
   // Sort by original length so shorter (=term-like) strings appear first
-  std::sort(ctxPairs.begin(), ctxPairs.end(),
-            [](const QPair<QString,QString>& a, const QPair<QString,QString>& b){
+  std::sort(ctxPairs.begin(),
+            ctxPairs.end(),
+            [](const QPair<QString, QString>& a, const QPair<QString, QString>& b) {
               return a.first.length() < b.first.length();
             });
   for (const auto& p : ctxPairs)
-    msg += QStringLiteral("  [EN] %1\n  [%2] %3\n\n")
-               .arg(p.first, m_targetLang, p.second);
+    msg += QStringLiteral("  [EN] %1\n  [%2] %3\n\n").arg(p.first, m_targetLang, p.second);
 
   if (ctxPairs.isEmpty())
     msg += QStringLiteral("  (none yet — you are the first batch)\n\n");
@@ -394,17 +400,16 @@ QString LWizardAiTranslator::buildUserMessage(
 
   msg += QJsonDocument(stringsObj).toJson(QJsonDocument::Indented);
 
-  msg += QStringLiteral(
-      "\n\n═══════════════════════════════\n"
-      "RESPONSE FORMAT\n"
-      "═══════════════════════════════\n"
-      "Return ONLY this JSON object — no markdown fences, no explanation:\n"
-      "{\n"
-      "  \"lwizard_translations\": {\n"
-      "    \"<contentuid>\": \"<translated text>\",\n"
-      "    ...\n"
-      "  }\n"
-      "}\n");
+  msg += QStringLiteral("\n\n═══════════════════════════════\n"
+                        "RESPONSE FORMAT\n"
+                        "═══════════════════════════════\n"
+                        "Return ONLY this JSON object — no markdown fences, no explanation:\n"
+                        "{\n"
+                        "  \"lwizard_translations\": {\n"
+                        "    \"<contentuid>\": \"<translated text>\",\n"
+                        "    ...\n"
+                        "  }\n"
+                        "}\n");
 
   return msg;
 }
@@ -413,8 +418,7 @@ QString LWizardAiTranslator::buildUserMessage(
 // Network
 // ---------------------------------------------------------------------------
 
-QByteArray LWizardAiTranslator::buildRequestBody(
-    const QList<QPair<QString, QString>>& batch) const
+QByteArray LWizardAiTranslator::buildRequestBody(const QList<QPair<QString, QString>>& batch) const
 {
   // System instruction
   QJsonObject sysText;
@@ -456,24 +460,21 @@ void LWizardAiTranslator::sendBatch(int idx)
   }
 
   const QString urlStr =
-      QStringLiteral("https://generativelanguage.googleapis.com/v1beta/models/") +
-      m_model +
-      QStringLiteral(":generateContent?key=") +
-      m_apiKey;
+      QStringLiteral("https://generativelanguage.googleapis.com/v1beta/models/") + m_model +
+      QStringLiteral(":generateContent?key=") + m_apiKey;
 
   QNetworkRequest req;
   req.setUrl(QUrl(urlStr));
-  req.setRawHeader(QByteArrayLiteral("Content-Type"),
-                   QByteArrayLiteral("application/json"));
+  req.setRawHeader(QByteArrayLiteral("Content-Type"), QByteArrayLiteral("application/json"));
 
   QByteArray body = buildRequestBody(m_batches.at(idx));
-  LWizardLog::debug(
-      QStringLiteral("AI translate: sending batch %1/%2 (%3 strings)")
-          .arg(idx + 1).arg(m_batches.size()).arg(m_batches.at(idx).size()));
+  LWizardLog::debug(QStringLiteral("AI translate: sending batch %1/%2 (%3 strings)")
+                        .arg(idx + 1)
+                        .arg(m_batches.size())
+                        .arg(m_batches.at(idx).size()));
 
   QNetworkReply* reply = m_nam->post(req, body);
-  connect(reply, &QNetworkReply::finished, this,
-          &LWizardAiTranslator::onReplyFinished);
+  connect(reply, &QNetworkReply::finished, this, &LWizardAiTranslator::onReplyFinished);
 }
 
 // ---------------------------------------------------------------------------
@@ -484,7 +485,8 @@ void LWizardAiTranslator::retryBatchAfter(int seconds)
 {
   const int ms = qMax(seconds, 1) * 1000 + 500; // +0.5s cushion
   LWizardLog::info(QStringLiteral("AI translate: rate-limited, retrying batch %1 in %2s")
-                       .arg(m_batchIdx + 1).arg(seconds));
+                       .arg(m_batchIdx + 1)
+                       .arg(seconds));
   emit rateLimited(seconds);
   QTimer::singleShot(ms, this, [this]() {
     if (!m_cancelled)
@@ -497,7 +499,7 @@ void LWizardAiTranslator::retryBatchAfter(int seconds)
   // Gemini format: "Please retry in 14.969702028s."
   static const QRegularExpression re(QStringLiteral("retry in (\\d+(?:\\.\\d+)?)s"),
                                      QRegularExpression::CaseInsensitiveOption);
-  const auto m = re.match(msg);
+  const auto                      m = re.match(msg);
   if (m.hasMatch())
     return qMax(1, static_cast<int>(m.captured(1).toDouble()) + 1);
   return 15; // safe default
@@ -510,7 +512,8 @@ void LWizardAiTranslator::retryBatchAfter(int seconds)
 void LWizardAiTranslator::onReplyFinished()
 {
   auto* reply = qobject_cast<QNetworkReply*>(sender());
-  if (!reply) return;
+  if (!reply)
+    return;
   reply->deleteLater();
 
   if (m_cancelled) {
@@ -522,14 +525,13 @@ void LWizardAiTranslator::onReplyFinished()
 
   if (reply->error() != QNetworkReply::NoError) {
     // Parse Gemini error body
-    QString detail;
-    int     httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    QString         detail;
+    int             httpStatus = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     QJsonParseError pe;
     const QJsonDocument doc = QJsonDocument::fromJson(body, &pe);
     if (pe.error == QJsonParseError::NoError && doc.isObject()) {
-      detail = doc.object()[QStringLiteral("error")]
-                   .toObject()[QStringLiteral("message")]
-                   .toString();
+      detail =
+          doc.object()[QStringLiteral("error")].toObject()[QStringLiteral("message")].toString();
     }
 
     // Rate limit → retry
@@ -539,9 +541,10 @@ void LWizardAiTranslator::onReplyFinished()
       return;
     }
 
-    const QString errMsg = detail.isEmpty()
-        ? QStringLiteral("Network error %1: %2").arg(reply->error()).arg(reply->errorString())
-        : QStringLiteral("Gemini API error: ") + detail;
+    const QString errMsg =
+        detail.isEmpty()
+            ? QStringLiteral("Network error %1: %2").arg(reply->error()).arg(reply->errorString())
+            : QStringLiteral("Gemini API error: ") + detail;
 
     LWizardLog::warn(QStringLiteral("AI translate: ") + errMsg);
     emit error(errMsg);
@@ -568,9 +571,10 @@ void LWizardAiTranslator::onReplyFinished()
     m_doneItems += m_batches.at(m_batchIdx).size();
     emit batchDone(results);
     emit progress(m_doneItems, m_totalItems);
-    LWizardLog::info(
-        QStringLiteral("AI translate: batch %1/%2 done — %3 strings")
-            .arg(m_batchIdx + 1).arg(m_batches.size()).arg(results.size()));
+    LWizardLog::info(QStringLiteral("AI translate: batch %1/%2 done — %3 strings")
+                         .arg(m_batchIdx + 1)
+                         .arg(m_batches.size())
+                         .arg(results.size()));
   }
 
   ++m_batchIdx;
@@ -587,31 +591,32 @@ void LWizardAiTranslator::onReplyFinished()
 QMap<QString, QString> LWizardAiTranslator::parseResponse(const QByteArray& body) const
 {
   // 1. Unwrap Gemini response envelope
-  QJsonParseError pe;
+  QJsonParseError     pe;
   const QJsonDocument envelope = QJsonDocument::fromJson(body, &pe);
   if (pe.error != QJsonParseError::NoError) {
-    LWizardLog::warn(QStringLiteral("AI translate: envelope parse error: ") +
-                     pe.errorString());
+    LWizardLog::warn(QStringLiteral("AI translate: envelope parse error: ") + pe.errorString());
     return {};
   }
 
   // candidates[0].content.parts[0].text
-  const QJsonArray candidates =
-      envelope.object()[QStringLiteral("candidates")].toArray();
+  const QJsonArray candidates = envelope.object()[QStringLiteral("candidates")].toArray();
   if (candidates.isEmpty()) {
     LWizardLog::warn(QStringLiteral("AI translate: no candidates in response"));
     LWizardLog::debug(QString::fromUtf8(body.left(400)));
     return {};
   }
 
-  QString text;
-  const QJsonArray parts =
-      candidates[0].toObject()[QStringLiteral("content")]
-          .toObject()[QStringLiteral("parts")]
-          .toArray();
+  QString          text;
+  const QJsonArray parts = candidates[0]
+                               .toObject()[QStringLiteral("content")]
+                               .toObject()[QStringLiteral("parts")]
+                               .toArray();
   for (const QJsonValue& part : parts) {
     const QString t = part.toObject()[QStringLiteral("text")].toString();
-    if (!t.isEmpty()) { text = t; break; }
+    if (!t.isEmpty()) {
+      text = t;
+      break;
+    }
   }
 
   if (text.isEmpty()) {
@@ -619,23 +624,21 @@ QMap<QString, QString> LWizardAiTranslator::parseResponse(const QByteArray& body
     return {};
   }
 
-  LWizardLog::debug(QStringLiteral("AI translate: raw text (first 300): ") +
-                    text.left(300));
+  LWizardLog::debug(QStringLiteral("AI translate: raw text (first 300): ") + text.left(300));
 
   return extractTranslationsJson(text);
 }
 
-/* static */ QMap<QString, QString>
-LWizardAiTranslator::extractTranslationsJson(const QString& text)
+/* static */ QMap<QString, QString> LWizardAiTranslator::extractTranslationsJson(
+    const QString& text)
 {
   // Helper: try to parse JSON object and return "translations" sub-map
   auto tryParse = [](const QString& s) -> QMap<QString, QString> {
-    QJsonParseError pe;
+    QJsonParseError     pe;
     const QJsonDocument doc = QJsonDocument::fromJson(s.toUtf8(), &pe);
     if (pe.error != QJsonParseError::NoError || !doc.isObject())
       return {};
-    const QJsonObject trans =
-        doc.object()[QStringLiteral("translations")].toObject();
+    const QJsonObject trans = doc.object()[QStringLiteral("translations")].toObject();
     if (trans.isEmpty())
       return {};
     QMap<QString, QString> out;
@@ -647,18 +650,19 @@ LWizardAiTranslator::extractTranslationsJson(const QString& text)
   // Level 1: entire text is JSON
   {
     auto r = tryParse(text);
-    if (!r.isEmpty()) return r;
+    if (!r.isEmpty())
+      return r;
   }
 
   // Level 2: extract from ```json ... ``` or ``` ... ``` markdown fences
   {
-    static const QRegularExpression fenceRe(
-        QStringLiteral("```(?:json)?\\s*([\\s\\S]*?)```"),
-        QRegularExpression::CaseInsensitiveOption);
-    auto m = fenceRe.match(text);
+    static const QRegularExpression fenceRe(QStringLiteral("```(?:json)?\\s*([\\s\\S]*?)```"),
+                                            QRegularExpression::CaseInsensitiveOption);
+    auto                            m = fenceRe.match(text);
     if (m.hasMatch()) {
       auto r = tryParse(m.captured(1).trimmed());
-      if (!r.isEmpty()) return r;
+      if (!r.isEmpty())
+        return r;
     }
   }
 
@@ -668,11 +672,13 @@ LWizardAiTranslator::extractTranslationsJson(const QString& text)
     const int last  = text.lastIndexOf(QChar('}'));
     if (first != -1 && last > first) {
       auto r = tryParse(text.mid(first, last - first + 1));
-      if (!r.isEmpty()) return r;
+      if (!r.isEmpty())
+        return r;
     }
   }
 
   LWizardLog::warn(QStringLiteral("AI translate: JSON extraction failed. "
-                                  "Raw text: ") + text.left(500));
+                                  "Raw text: ") +
+                   text.left(500));
   return {};
 }

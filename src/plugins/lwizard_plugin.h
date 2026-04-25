@@ -19,30 +19,33 @@ class LWizardPlugin : public MOBase::IPluginTool
 public:
   LWizardPlugin() = default;
 
-  bool init(MOBase::IOrganizer* organizer) override;
-  QString name() const override;
-  QString author() const override;
-  QString description() const override;
-  MOBase::VersionInfo version() const override;
+  bool                         init(MOBase::IOrganizer* organizer) override;
+  QString                      name() const override;
+  QString                      author() const override;
+  QString                      description() const override;
+  MOBase::VersionInfo          version() const override;
   QList<MOBase::PluginSetting> settings() const override;
 
   // IPluginTool
   QString displayName() const override;
   QString tooltip() const override;
-  QIcon icon() const override;
+  QIcon   icon() const override;
 
 public Q_SLOTS:
   void display() const override;
 
   /** Shared Nexus API — owned by the plugin (persistent across window open/close). */
-  LWizardNexusApi* nexusApi() const { return m_nexusApi; }
+  LWizardNexusApi* nexusApi() const
+  {
+    return m_nexusApi;
+  }
 
 private:
-  MOBase::IOrganizer* m_organizer = nullptr;
+  MOBase::IOrganizer*                     m_organizer = nullptr;
   std::shared_ptr<BG3LocalizationContent> m_localizationContent;
-  std::unique_ptr<LWizardModListUiPatch> m_modListUiPatch;
-  LWizardNexusApi* m_nexusApi = nullptr;
-  bool m_contentFeatureRegistered = false;
+  std::unique_ptr<LWizardModListUiPatch>  m_modListUiPatch;
+  LWizardNexusApi*                        m_nexusApi                 = nullptr;
+  bool                                    m_contentFeatureRegistered = false;
 
   void registerLocalizationContentFeature();
 };

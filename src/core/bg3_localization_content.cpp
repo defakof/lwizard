@@ -30,12 +30,13 @@ namespace {
 constexpr int kCacheJsonVersion       = 2;
 constexpr int kLegacyCacheJsonVersion = 1;
 
-/** Minimum loca UUID count to consider translation-mod overlap (small mods may have only a handful). */
+/** Minimum loca UUID count to consider translation-mod overlap (small mods may have only a
+ * handful). */
 constexpr int kMinUuidsTranslation = 3;
 /** Minimum matching UUIDs vs a reference mod (must still meet kOverlapRecall). */
-constexpr int kMinOverlapAbs       = 2;
+constexpr int kMinOverlapAbs = 2;
 /** |intersection| / |candidate UUIDs| to classify as translation mod. */
-constexpr double kOverlapRecall    = 0.40;
+constexpr double kOverlapRecall = 0.40;
 
 /** Parse BG3 localization XML (loca convert output or Mods/**\/Localization/*\/\/*.xml). */
 static QJsonObject parseBg3LocalizationXmlContent(QIODevice* io)
@@ -44,8 +45,10 @@ static QJsonObject parseBg3LocalizationXmlContent(QIODevice* io)
   QJsonObject      out;
 
   auto pickKey = [](const QXmlStreamAttributes& a) -> QString {
-    static const QStringList keys = {QStringLiteral("contentuid"), QStringLiteral("uuid"),
-                                     QStringLiteral("key"), QStringLiteral("id")};
+    static const QStringList keys = {QStringLiteral("contentuid"),
+                                     QStringLiteral("uuid"),
+                                     QStringLiteral("key"),
+                                     QStringLiteral("id")};
     for (const QString& k : keys) {
       for (const auto& attr : a) {
         if (attr.name().compare(k, Qt::CaseInsensitive) == 0)
@@ -129,7 +132,7 @@ QByteArray variantToJsonBytes(const QVariant& v)
 
 QStringList jsonArrayToStringList(const QJsonValue& value)
 {
-  QStringList out;
+  QStringList      out;
   const QJsonArray arr = value.toArray();
   out.reserve(arr.size());
   for (const QJsonValue& item : arr) {
@@ -158,27 +161,30 @@ QStringList normalizedLinkedMods(QStringList mods)
 QString contentIdLabel(int contentId)
 {
   switch (contentId) {
-    case BG3LocalizationContent::CONTENT_EMBEDDED:
-      return QStringLiteral("embedded");
-    case BG3LocalizationContent::CONTENT_INSTALLED:
-      return QStringLiteral("installed/redundant");
-    case BG3LocalizationContent::CONTENT_AVAILABLE:
-      return QStringLiteral("available");
-    case BG3LocalizationContent::CONTENT_OUTDATED:
-      return QStringLiteral("outdated");
-    case BG3LocalizationContent::CONTENT_UNAVAILABLE:
-      return QStringLiteral("unavailable");
-    case BG3LocalizationContent::CONTENT_TRANSLATION_MOD:
-      return QStringLiteral("translation-mod");
-    default:
-      return QStringLiteral("unknown");
+  case BG3LocalizationContent::CONTENT_EMBEDDED:
+    return QStringLiteral("embedded");
+  case BG3LocalizationContent::CONTENT_INSTALLED:
+    return QStringLiteral("installed/redundant");
+  case BG3LocalizationContent::CONTENT_AVAILABLE:
+    return QStringLiteral("available");
+  case BG3LocalizationContent::CONTENT_OUTDATED:
+    return QStringLiteral("outdated");
+  case BG3LocalizationContent::CONTENT_UNAVAILABLE:
+    return QStringLiteral("unavailable");
+  case BG3LocalizationContent::CONTENT_TRANSLATION_MOD:
+    return QStringLiteral("translation-mod");
+  default:
+    return QStringLiteral("unknown");
   }
 }
 
 class ScopedScanTimer
 {
 public:
-  explicit ScopedScanTimer(qint64* bucket) : m_bucket(bucket) { m_timer.start(); }
+  explicit ScopedScanTimer(qint64* bucket) : m_bucket(bucket)
+  {
+    m_timer.start();
+  }
   ~ScopedScanTimer()
   {
     if (m_bucket)
@@ -200,7 +206,7 @@ QString normalizedPakEntry(QString entry)
   return entry;
 }
 
-}  // namespace
+} // namespace
 
 BG3LocalizationContent::BG3LocalizationContent(MOBase::IOrganizer* organizer)
     : QObject(nullptr), m_organizer(organizer)
@@ -210,17 +216,17 @@ BG3LocalizationContent::BG3LocalizationContent(MOBase::IOrganizer* organizer)
 // ModDataContent interface
 // ---------------------------------------------------------------------------
 
-std::vector<MOBase::ModDataContent::Content>
-BG3LocalizationContent::getAllContents() const
+std::vector<MOBase::ModDataContent::Content> BG3LocalizationContent::getAllContents() const
 {
   return {
-      Content(CONTENT_EMBEDDED,    "Translation: Embedded",            ":/lwizard/1_embedded.ico"),
-      Content(CONTENT_INSTALLED,   "Translation: Installed / redundant (other lang or base mod)",
-            ":/lwizard/2_installed.ico"),
-      Content(CONTENT_AVAILABLE,   "Translation: Available on Nexus",   ":/lwizard/3_available.ico"),
-      Content(CONTENT_OUTDATED,    "Translation: Installed, outdated",  ":/lwizard/4_outdated.ico"),
-      Content(CONTENT_UNAVAILABLE, "Translation: Not available",        ":/lwizard/5_unavailable.ico"),
-      Content(CONTENT_TRANSLATION_MOD, "Translation: Mod (UUID match)", ":/lwizard/2_installed.ico"),
+      Content(CONTENT_EMBEDDED, "Translation: Embedded", ":/lwizard/1_embedded.ico"),
+      Content(CONTENT_INSTALLED,
+              "Translation: Installed / redundant (other lang or base mod)",
+              ":/lwizard/2_installed.ico"),
+      Content(CONTENT_AVAILABLE, "Translation: Available on Nexus", ":/lwizard/3_available.ico"),
+      Content(CONTENT_OUTDATED, "Translation: Installed, outdated", ":/lwizard/4_outdated.ico"),
+      Content(CONTENT_UNAVAILABLE, "Translation: Not available", ":/lwizard/5_unavailable.ico"),
+      Content(CONTENT_TRANSLATION_MOD, "Translation: Mod (UUID match)", ":/lwizard/6_linked.ico"),
   };
 }
 
@@ -265,14 +271,16 @@ bool BG3LocalizationContent::clearAllCaches()
   QJsonObject scanRoot;
   scanRoot[QStringLiteral("v")]    = kCacheJsonVersion;
   scanRoot[QStringLiteral("mods")] = QJsonObject{};
-  m_organizer->setPersistent(QStringLiteral("lwizard"), kPersistentKey(),
+  m_organizer->setPersistent(QStringLiteral("lwizard"),
+                             kPersistentKey(),
                              QVariant(QJsonDocument(scanRoot).toJson(QJsonDocument::Compact)),
                              true);
 
   QJsonObject stringsRoot;
   stringsRoot[QStringLiteral("v")]    = 1;
   stringsRoot[QStringLiteral("mods")] = QJsonObject{};
-  m_organizer->setPersistent(QStringLiteral("lwizard"), kStringsPersistentKey(),
+  m_organizer->setPersistent(QStringLiteral("lwizard"),
+                             kStringsPersistentKey(),
                              QVariant(QJsonDocument(stringsRoot).toJson(QJsonDocument::Compact)),
                              true);
 
@@ -281,8 +289,8 @@ bool BG3LocalizationContent::clearAllCaches()
   return true;
 }
 
-BG3LocalizationContent::CacheEntry
-BG3LocalizationContent::entryForCurrentLanguage(const QString& modName) const
+BG3LocalizationContent::CacheEntry BG3LocalizationContent::entryForCurrentLanguage(
+    const QString& modName) const
 {
   const QString language = currentLanguage();
   auto          lock     = QMutexLocker(&m_cacheMutex);
@@ -350,27 +358,28 @@ bool BG3LocalizationContent::hasLinkedMods(const QString& modName) const
   return !linkedModsFor(modName).isEmpty();
 }
 
-void BG3LocalizationContent::markNexusAvailable(const QString& modName,
-                                                 const QList<int>& nexusModIds)
+void BG3LocalizationContent::markNexusAvailable(const QString&    modName,
+                                                const QList<int>& nexusModIds)
 {
-  const QString lang = currentLanguage();
-  bool changed = false;
+  const QString lang    = currentLanguage();
+  bool          changed = false;
 
   {
     QMutexLocker lk(&m_cacheMutex);
-    auto it = m_cache.find(modName);
+    auto         it = m_cache.find(modName);
     if (it != m_cache.end() && it->language == lang) {
       if (it->contentId == CONTENT_UNAVAILABLE)
         it->contentId = CONTENT_AVAILABLE;
       it->nexusTranslationModIds = nexusModIds;
-      changed = true;
+      changed                    = true;
     }
   }
 
   if (changed) {
     LWizardLog::info(
         QStringLiteral("Nexus: marked '%1' as CONTENT_AVAILABLE (%2 translation mod(s))")
-            .arg(modName).arg(nexusModIds.size()));
+            .arg(modName)
+            .arg(nexusModIds.size()));
     emit contentCacheUpdated();
   }
 }
@@ -378,7 +387,7 @@ void BG3LocalizationContent::markNexusAvailable(const QString& modName,
 QList<int> BG3LocalizationContent::nexusTranslationModIds(const QString& modName) const
 {
   QMutexLocker lk(&m_cacheMutex);
-  auto it = m_cache.constFind(modName);
+  auto         it = m_cache.constFind(modName);
   if (it != m_cache.constEnd())
     return it->nexusTranslationModIds;
   return {};
@@ -422,8 +431,8 @@ QString BG3LocalizationContent::localizationFingerprint(const QString& modAbsPat
       QDirIterator it(loc.path(), QDir::Files, QDirIterator::Subdirectories);
       while (it.hasNext()) {
         it.next();
-        const QFileInfo fi = it.fileInfo();
-        const QString     rel = loc.relativeFilePath(fi.absoluteFilePath());
+        const QFileInfo fi  = it.fileInfo();
+        const QString   rel = loc.relativeFilePath(fi.absoluteFilePath());
         appendFile(QStringLiteral("Localization/") + rel, fi);
       }
     }
@@ -439,12 +448,14 @@ QString BG3LocalizationContent::localizationFingerprint(const QString& modAbsPat
   {
     QDir pakDir(modAbsPath + QStringLiteral("/PAK_FILES"));
     if (pakDir.exists()) {
-      QDirIterator it(pakDir.path(), QStringList{QStringLiteral("*.pak")}, QDir::Files,
+      QDirIterator it(pakDir.path(),
+                      QStringList{QStringLiteral("*.pak")},
+                      QDir::Files,
                       QDirIterator::Subdirectories);
       while (it.hasNext()) {
         it.next();
         const QFileInfo fi  = it.fileInfo();
-        const QString rel   = pakDir.relativeFilePath(fi.absoluteFilePath());
+        const QString   rel = pakDir.relativeFilePath(fi.absoluteFilePath());
         appendFile(QStringLiteral("PAK_FILES/") + rel, fi);
       }
     }
@@ -454,16 +465,18 @@ QString BG3LocalizationContent::localizationFingerprint(const QString& modAbsPat
   {
     QDir pakDir(modAbsPath + QStringLiteral("/PAK_FILES"));
     if (pakDir.exists()) {
-      QDirIterator it(pakDir.path(), QStringList{QStringLiteral("Localization")},
-                      QDir::Dirs, QDirIterator::Subdirectories);
+      QDirIterator it(pakDir.path(),
+                      QStringList{QStringLiteral("Localization")},
+                      QDir::Dirs,
+                      QDirIterator::Subdirectories);
       while (it.hasNext()) {
         it.next();
-        const QDir locRoot(it.filePath());
+        const QDir   locRoot(it.filePath());
         QDirIterator files(locRoot.path(), QDir::Files, QDirIterator::Subdirectories);
         while (files.hasNext()) {
           files.next();
-          const QFileInfo fi = files.fileInfo();
-          const QString rel  = pakDir.relativeFilePath(fi.absoluteFilePath());
+          const QFileInfo fi  = files.fileInfo();
+          const QString   rel = pakDir.relativeFilePath(fi.absoluteFilePath());
           appendFile(QStringLiteral("PAK_FILES/") + rel, fi);
         }
       }
@@ -478,28 +491,27 @@ QString BG3LocalizationContent::localizationFingerprint(const QString& modAbsPat
 
 void BG3LocalizationContent::hydrateMemoryFromPersistent()
 {
-  const QString lang = currentLanguage();
-  const QByteArray raw =
-      variantToJsonBytes(m_organizer->persistent(QStringLiteral("lwizard"), kPersistentKey(),
-                                                 QVariant()));
+  const QString    lang = currentLanguage();
+  const QByteArray raw  = variantToJsonBytes(
+      m_organizer->persistent(QStringLiteral("lwizard"), kPersistentKey(), QVariant()));
   if (raw.isEmpty())
     return;
 
-  QJsonParseError err;
+  QJsonParseError     err;
   const QJsonDocument doc = QJsonDocument::fromJson(raw, &err);
   if (err.error != QJsonParseError::NoError || !doc.isObject())
     return;
-  const QJsonObject root = doc.object();
-  const int version = root[QStringLiteral("v")].toInt(0);
+  const QJsonObject root    = doc.object();
+  const int         version = root[QStringLiteral("v")].toInt(0);
   if (version != kLegacyCacheJsonVersion && version != kCacheJsonVersion)
     return;
 
-  const QJsonObject mods = root[QStringLiteral("mods")].toObject();
+  const QJsonObject          mods = root[QStringLiteral("mods")].toObject();
   QHash<QString, CacheEntry> loaded;
 
   for (auto it = mods.constBegin(); it != mods.constEnd(); ++it) {
-    const QString modName = it.key();
-    const QJsonObject modObj = it->toObject();
+    const QString     modName    = it.key();
+    const QJsonObject modObj     = it->toObject();
     const QString     storedPath = modObj[QStringLiteral("path")].toString();
     const QJsonObject langs      = modObj[QStringLiteral("langs")].toObject();
     const QJsonObject langEntry  = langs[lang].toObject();
@@ -518,8 +530,7 @@ void BG3LocalizationContent::hydrateMemoryFromPersistent()
     const QString fp = langEntry[QStringLiteral("fp")].toString();
     if (id == CONTENT_NONE || fp.isEmpty())
       continue;
-    if (id == CONTENT_UNAVAILABLE &&
-        discoverLanguagesInMod(mod->absolutePath()).isEmpty())
+    if (id == CONTENT_UNAVAILABLE && discoverLanguagesInMod(mod->absolutePath()).isEmpty())
       continue;
 
     const QString liveFp = localizationFingerprint(mod->absolutePath());
@@ -532,11 +543,9 @@ void BG3LocalizationContent::hydrateMemoryFromPersistent()
     entry.fingerprint = fp;
 
     if (version >= kCacheJsonVersion) {
-      entry.translationTarget =
-          langEntry[QStringLiteral("target")].toString().trimmed();
-      entry.separateTranslations =
-          jsonArrayToStringList(langEntry[QStringLiteral("translations")]);
-      entry.relationshipsKnown = langEntry[QStringLiteral("linksKnown")].toBool(false);
+      entry.translationTarget    = langEntry[QStringLiteral("target")].toString().trimmed();
+      entry.separateTranslations = jsonArrayToStringList(langEntry[QStringLiteral("translations")]);
+      entry.relationshipsKnown   = langEntry[QStringLiteral("linksKnown")].toBool(false);
     }
 
     loaded.insert(modName, entry);
@@ -550,8 +559,7 @@ void BG3LocalizationContent::hydrateMemoryFromPersistent()
         continue;
       }
 
-      if (it->translationTarget == it.key() ||
-          !loaded.contains(it->translationTarget)) {
+      if (it->translationTarget == it.key() || !loaded.contains(it->translationTarget)) {
         it->translationTarget.clear();
       }
 
@@ -583,17 +591,16 @@ void BG3LocalizationContent::pruneMissingModsFromCache()
   for (const QString& n : allMods)
     valid.insert(n);
 
-  bool memChanged      = false;
-  bool linksTrimmed    = false;
+  bool memChanged   = false;
+  bool linksTrimmed = false;
   {
     auto lock = QMutexLocker(&m_cacheMutex);
     for (auto it = m_cache.begin(); it != m_cache.end();) {
       if (!valid.contains(it.key())) {
-        it = m_cache.erase(it);
+        it         = m_cache.erase(it);
         memChanged = true;
       } else {
-        if (!it->translationTarget.isEmpty() &&
-            !valid.contains(it->translationTarget)) {
+        if (!it->translationTarget.isEmpty() && !valid.contains(it->translationTarget)) {
           it->translationTarget.clear();
           linksTrimmed = true;
         }
@@ -613,39 +620,37 @@ void BG3LocalizationContent::pruneMissingModsFromCache()
     }
   }
 
-  const QByteArray raw =
-      variantToJsonBytes(m_organizer->persistent(QStringLiteral("lwizard"), kPersistentKey(),
-                                                 QVariant()));
+  const QByteArray raw = variantToJsonBytes(
+      m_organizer->persistent(QStringLiteral("lwizard"), kPersistentKey(), QVariant()));
   if (raw.isEmpty())
     return;
 
   QJsonParseError err;
-  QJsonDocument doc = QJsonDocument::fromJson(raw, &err);
+  QJsonDocument   doc = QJsonDocument::fromJson(raw, &err);
   if (err.error != QJsonParseError::NoError || !doc.isObject())
     return;
 
-  QJsonObject root = doc.object();
-  QJsonObject mods = root[QStringLiteral("mods")].toObject();
+  QJsonObject root        = doc.object();
+  QJsonObject mods        = root[QStringLiteral("mods")].toObject();
   bool        jsonChanged = false;
   for (auto it = mods.begin(); it != mods.end();) {
     if (!valid.contains(it.key())) {
-      it = mods.erase(it);
+      it          = mods.erase(it);
       jsonChanged = true;
     } else
       ++it;
   }
 
   for (auto it = mods.begin(); it != mods.end(); ++it) {
-    QJsonObject modObj = it->toObject();
-    QJsonObject langs  = modObj[QStringLiteral("langs")].toObject();
-    bool modChanged    = false;
+    QJsonObject modObj     = it->toObject();
+    QJsonObject langs      = modObj[QStringLiteral("langs")].toObject();
+    bool        modChanged = false;
     for (auto langIt = langs.begin(); langIt != langs.end(); ++langIt) {
-      QJsonObject langEntry = langIt->toObject();
-      const QString target =
-          langEntry[QStringLiteral("target")].toString().trimmed();
+      QJsonObject   langEntry = langIt->toObject();
+      const QString target    = langEntry[QStringLiteral("target")].toString().trimmed();
       if (!target.isEmpty() && !valid.contains(target)) {
         langEntry.remove(QStringLiteral("target"));
-        modChanged  = true;
+        modChanged = true;
       }
 
       const QStringList translations =
@@ -661,7 +666,7 @@ void BG3LocalizationContent::pruneMissingModsFromCache()
         for (const QString& translation : keptTranslations)
           arr.append(translation);
         langEntry[QStringLiteral("translations")] = arr;
-        modChanged = true;
+        modChanged                                = true;
       }
 
       if (modChanged)
@@ -678,13 +683,15 @@ void BG3LocalizationContent::pruneMissingModsFromCache()
   if (!jsonChanged && !linksTrimmed && !memChanged)
     return;
 
-  root[QStringLiteral("mods")]  = mods;
-  root[QStringLiteral("v")]     = kCacheJsonVersion;
-  m_organizer->setPersistent(QStringLiteral("lwizard"), kPersistentKey(),
-                             QVariant(QJsonDocument(root).toJson(QJsonDocument::Compact)), true);
+  root[QStringLiteral("mods")] = mods;
+  root[QStringLiteral("v")]    = kCacheJsonVersion;
+  m_organizer->setPersistent(QStringLiteral("lwizard"),
+                             kPersistentKey(),
+                             QVariant(QJsonDocument(root).toJson(QJsonDocument::Compact)),
+                             true);
 }
 
-void BG3LocalizationContent::filterModsJsonToSingleLanguage(QJsonObject& mods,
+void BG3LocalizationContent::filterModsJsonToSingleLanguage(QJsonObject&   mods,
                                                             const QString& keepLang) const
 {
   QJsonObject out;
@@ -694,9 +701,9 @@ void BG3LocalizationContent::filterModsJsonToSingleLanguage(QJsonObject& mods,
     if (!langs.contains(keepLang))
       continue;
     QJsonObject one;
-    one[keepLang]                = langs[keepLang];
+    one[keepLang]                   = langs[keepLang];
     modObj[QStringLiteral("langs")] = one;
-    out[it.key()]                = modObj;
+    out[it.key()]                   = modObj;
   }
   mods = out;
 }
@@ -706,41 +713,38 @@ void BG3LocalizationContent::savePersistentFromMemory()
   QHash<QString, CacheEntry> snapshot;
   {
     auto lock = QMutexLocker(&m_cacheMutex);
-    snapshot = m_cache;
+    snapshot  = m_cache;
   }
   savePersistentFromMemory(snapshot);
 }
 
-void BG3LocalizationContent::savePersistentFromMemory(
-    const QHash<QString, CacheEntry>& entries)
+void BG3LocalizationContent::savePersistentFromMemory(const QHash<QString, CacheEntry>& entries)
 {
-  const QByteArray raw =
-      variantToJsonBytes(m_organizer->persistent(QStringLiteral("lwizard"), kPersistentKey(),
-                                                 QVariant()));
+  const QByteArray raw = variantToJsonBytes(
+      m_organizer->persistent(QStringLiteral("lwizard"), kPersistentKey(), QVariant()));
 
   QJsonObject root;
   if (!raw.isEmpty()) {
-    QJsonParseError err;
+    QJsonParseError     err;
     const QJsonDocument existing = QJsonDocument::fromJson(raw, &err);
     if (err.error == QJsonParseError::NoError && existing.isObject())
       root = existing.object();
   }
 
   root[QStringLiteral("v")] = kCacheJsonVersion;
-  QJsonObject mods            = root[QStringLiteral("mods")].toObject();
+  QJsonObject mods          = root[QStringLiteral("mods")].toObject();
 
   for (auto it = entries.constBegin(); it != entries.constEnd(); ++it) {
-    if (it->contentId == CONTENT_NONE || it->fingerprint.isEmpty() ||
-        !it->relationshipsKnown)
+    if (it->contentId == CONTENT_NONE || it->fingerprint.isEmpty() || !it->relationshipsKnown)
       continue;
 
-    const QString          modName    = it.key();
-    const QString          entryLang  = it->language;
-    MOBase::IModInterface* mod        = m_organizer->modList()->getMod(modName);
+    const QString          modName   = it.key();
+    const QString          entryLang = it->language;
+    MOBase::IModInterface* mod       = m_organizer->modList()->getMod(modName);
     if (!mod)
       continue;
 
-    QJsonObject modObj = mods[modName].toObject();
+    QJsonObject modObj             = mods[modName].toObject();
     modObj[QStringLiteral("path")] = mod->absolutePath();
     QJsonObject langs              = modObj[QStringLiteral("langs")].toObject();
     QJsonObject le;
@@ -755,16 +759,17 @@ void BG3LocalizationContent::savePersistentFromMemory(
         translations.append(translation);
       le[QStringLiteral("translations")] = translations;
     }
-    langs[entryLang] = le;
+    langs[entryLang]                = le;
     modObj[QStringLiteral("langs")] = langs;
-    mods[modName]                     = modObj;
+    mods[modName]                   = modObj;
   }
 
   if (cacheOnlyCurrentLanguage())
     filterModsJsonToSingleLanguage(mods, currentLanguage());
 
   root[QStringLiteral("mods")] = mods;
-  m_organizer->setPersistent(QStringLiteral("lwizard"), kPersistentKey(),
+  m_organizer->setPersistent(QStringLiteral("lwizard"),
+                             kPersistentKey(),
                              QVariant(QJsonDocument(root).toJson(QJsonDocument::Compact)),
                              true);
 }
@@ -780,7 +785,7 @@ void BG3LocalizationContent::prunePersistentCacheToCurrentLanguageOnly()
       return;
 
     QJsonParseError err;
-    QJsonDocument doc = QJsonDocument::fromJson(raw, &err);
+    QJsonDocument   doc = QJsonDocument::fromJson(raw, &err);
     if (err.error != QJsonParseError::NoError || !doc.isObject())
       return;
 
@@ -790,23 +795,24 @@ void BG3LocalizationContent::prunePersistentCacheToCurrentLanguageOnly()
 
     root[QStringLiteral("mods")] = mods;
     root[QStringLiteral("v")]    = version;
-    m_organizer->setPersistent(QStringLiteral("lwizard"), key,
-                               QVariant(QJsonDocument(root).toJson(QJsonDocument::Compact)), true);
+    m_organizer->setPersistent(QStringLiteral("lwizard"),
+                               key,
+                               QVariant(QJsonDocument(root).toJson(QJsonDocument::Compact)),
+                               true);
   };
 
   pruneKey(kPersistentKey(), kCacheJsonVersion);
   pruneKey(kStringsPersistentKey(), 1);
 
-  LWizardLog::info(
-      QStringLiteral("Disk localization cache trimmed to \"%1\" only (other languages "
-                     "removed).")
-          .arg(lang));
+  LWizardLog::info(QStringLiteral("Disk localization cache trimmed to \"%1\" only (other languages "
+                                  "removed).")
+                       .arg(lang));
 }
 
 bool BG3LocalizationContent::cacheOnlyCurrentLanguage() const
 {
-  const QVariant v = m_organizer->pluginSetting(
-      QStringLiteral("lwizard"), QStringLiteral("cache_only_current_language"));
+  const QVariant v = m_organizer->pluginSetting(QStringLiteral("lwizard"),
+                                                QStringLiteral("cache_only_current_language"));
   return v.isValid() ? v.toBool() : false;
 }
 
@@ -850,7 +856,11 @@ void BG3LocalizationContent::scanModAsync(const QString& modName)
                        .arg(queuedCount));
 
   QMetaObject::invokeMethod(
-      this, [this]() { startNextQueuedAutoScan(); }, Qt::QueuedConnection);
+      this,
+      [this]() {
+        startNextQueuedAutoScan();
+      },
+      Qt::QueuedConnection);
 }
 
 bool BG3LocalizationContent::scanAll()
@@ -874,9 +884,8 @@ bool BG3LocalizationContent::scanAll()
   const QStringList mods = validModNames();
 
   if (clearedQueuedScans > 0) {
-    LWizardLog::info(
-        QStringLiteral("Manual full scan superseded %1 queued automatic scan(s).")
-            .arg(clearedQueuedScans));
+    LWizardLog::info(QStringLiteral("Manual full scan superseded %1 queued automatic scan(s).")
+                         .arg(clearedQueuedScans));
   }
 
   LWizardLog::info(
@@ -892,18 +901,20 @@ bool BG3LocalizationContent::scanAll()
     int foundTranslation = 0;
     int skipped          = 0;
 
-    QHash<QString, int>            scanBaseId;
+    QHash<QString, int>           scanBaseId;
     QHash<QString, QSet<QString>> scanUuids;
-    QHash<QString, QString>        scanPath;
-    QHash<QString, QString>        scanFp;
+    QHash<QString, QString>       scanPath;
+    QHash<QString, QString>       scanFp;
 
     int done = 0;
     for (const QString& modName : mods) {
       auto emitProgress = [&]() {
         QMetaObject::invokeMethod(
-            this, [this, done, total = mods.size(), modName]() {
+            this,
+            [this, done, total = mods.size(), modName]() {
               emit scanProgress(done, total, modName);
-            }, Qt::QueuedConnection);
+            },
+            Qt::QueuedConnection);
       };
 
       auto* mod = m_organizer->modList()->getMod(modName);
@@ -914,7 +925,7 @@ bool BG3LocalizationContent::scanAll()
       }
 
       const QString modPath = mod->absolutePath();
-      QString fp;
+      QString       fp;
       {
         ScopedScanTimer timer(&metrics.fingerprintMs);
         fp = localizationFingerprint(modPath);
@@ -948,9 +959,8 @@ bool BG3LocalizationContent::scanAll()
       QStringList topEntries;
       for (const auto& e : *tree)
         topEntries.append(e->name() + (e->isDir() ? QStringLiteral("/") : QStringLiteral("")));
-      LWizardLog::debug(
-          QStringLiteral("  [%1] top entries: ").arg(modName) +
-          topEntries.join(QStringLiteral(", ")));
+      LWizardLog::debug(QStringLiteral("  [%1] top entries: ").arg(modName) +
+                        topEntries.join(QStringLiteral(", ")));
 
       int baseId = CONTENT_NONE;
       {
@@ -980,13 +990,13 @@ bool BG3LocalizationContent::scanAll()
 
     const QList<QString> rescanned = scanBaseId.keys();
 
-    QHash<QString, int> finalIds;
+    QHash<QString, int>     finalIds;
     QHash<QString, QString> translationCandToRef;
 
     {
-      ScopedScanTimer timer(&metrics.matchMs);
+      ScopedScanTimer                     timer(&metrics.matchMs);
       const QHash<QString, QSet<QString>> persistentUuidsByMod = preloadPersistentUuidKeys();
-      QHash<QString, QStringList> uuidIndexByUuid;
+      QHash<QString, QStringList>         uuidIndexByUuid;
       for (const QString& indexedModName : mods) {
         QSet<QString> uuids = scanUuids.value(indexedModName);
         uuids |= persistentUuidsByMod.value(indexedModName);
@@ -997,10 +1007,9 @@ bool BG3LocalizationContent::scanAll()
       }
 
       for (const QString& modName : rescanned) {
-        const int                     baseId = scanBaseId[modName];
-        const QPair<int, QString> pr =
-            applyTranslationModClassification(modName, baseId, mods, scanBaseId, scanUuids,
-                                              persistentUuidsByMod, uuidIndexByUuid);
+        const int                 baseId = scanBaseId[modName];
+        const QPair<int, QString> pr     = applyTranslationModClassification(
+            modName, baseId, mods, scanBaseId, scanUuids, persistentUuidsByMod, uuidIndexByUuid);
         finalIds[modName] = pr.first;
         if (pr.first == CONTENT_TRANSLATION_MOD && !pr.second.isEmpty())
           translationCandToRef[modName] = pr.second;
@@ -1023,27 +1032,26 @@ bool BG3LocalizationContent::scanAll()
       if (finalIds[modName] != CONTENT_UNAVAILABLE)
         continue;
       finalIds[modName] = CONTENT_INSTALLED;
-      LWizardLog::info(
-          QStringLiteral("[translation-installed-for-base] ") + modName);
+      LWizardLog::info(QStringLiteral("[translation-installed-for-base] ") + modName);
     }
 
-    int foundInstalled = 0;
+    int                        foundInstalled = 0;
     QHash<QString, QByteArray> embeddedStringsByMod;
     QHash<QString, CacheEntry> updatedEntries;
     for (const QString& modName : rescanned) {
-      const int finalId = finalIds[modName];
+      const int  finalId = finalIds[modName];
       CacheEntry entry;
-      entry.language            = language;
-      entry.contentId           = finalId;
-      entry.fingerprint         = scanFp[modName];
-      entry.translationTarget   = translationCandToRef.value(modName);
+      entry.language             = language;
+      entry.contentId            = finalId;
+      entry.fingerprint          = scanFp[modName];
+      entry.translationTarget    = translationCandToRef.value(modName);
       entry.separateTranslations = baseToTranslations.value(modName);
-      entry.relationshipsKnown  = true;
+      entry.relationshipsKnown   = true;
 
       updatedEntries.insert(modName, entry);
 
       if (finalId == CONTENT_EMBEDDED) {
-        ScopedScanTimer timer(&metrics.uuidMs);
+        ScopedScanTimer  timer(&metrics.uuidMs);
         const QByteArray compressed =
             buildEmbeddedStringsForMod(scanPath[modName], language, &pakManifestCache, &metrics);
         if (!compressed.isEmpty())
@@ -1060,7 +1068,7 @@ bool BG3LocalizationContent::scanAll()
         ++foundInstalled;
         if (refModsWithSeparateTranslation.contains(modName) &&
             scanBaseId[modName] == CONTENT_UNAVAILABLE)
-          ;  // already logged [translation-installed-for-base]
+          ; // already logged [translation-installed-for-base]
         else
           LWizardLog::info(QStringLiteral("[translation-redundant] ") + modName);
       } else if (finalId == CONTENT_AVAILABLE) {
@@ -1107,8 +1115,18 @@ bool BG3LocalizationContent::scanAll()
 
     QMetaObject::invokeMethod(
         this,
-        [this, language, foundEmbedded, foundTranslation, foundInstalled, skipped,
-         embeddedStringsByMod, scanPath, scanFp, persistentSnapshot, metrics, totalMs]() mutable {
+        [this,
+         language,
+         foundEmbedded,
+         foundTranslation,
+         foundInstalled,
+         skipped,
+         embeddedStringsByMod,
+         scanPath,
+         scanFp,
+         persistentSnapshot,
+         metrics,
+         totalMs]() mutable {
           QElapsedTimer persistTimer;
           persistTimer.start();
           saveEmbeddedStringsBlobs(embeddedStringsByMod, scanPath, scanFp, language);
@@ -1146,8 +1164,7 @@ BG3LocalizationContent::SingleModScanResult BG3LocalizationContent::computeSingl
   auto* mod = m_organizer->modList()->getMod(modName);
   if (!mod) {
     LWizardLog::warn(
-        QStringLiteral("Automatic scan skipped; mod disappeared before scanning: %1")
-            .arg(modName));
+        QStringLiteral("Automatic scan skipped; mod disappeared before scanning: %1").arg(modName));
     return result;
   }
   if (mod->isSeparator()) {
@@ -1157,21 +1174,20 @@ BG3LocalizationContent::SingleModScanResult BG3LocalizationContent::computeSingl
 
   if (!(m_organizer->modList()->state(modName) & MOBase::IModList::STATE_VALID)) {
     LWizardLog::warn(
-        QStringLiteral("Automatic scan skipped; mod is not in a scannable state: %1")
-            .arg(modName));
+        QStringLiteral("Automatic scan skipped; mod is not in a scannable state: %1").arg(modName));
     return result;
   }
 
-  result.valid   = true;
-  result.modPath = mod->absolutePath();
+  result.valid       = true;
+  result.modPath     = mod->absolutePath();
   result.fingerprint = localizationFingerprint(result.modPath);
 
   {
     auto lock = QMutexLocker(&m_cacheMutex);
     auto cit  = m_cache.constFind(modName);
-    if (cit != m_cache.constEnd() && cit->language == language &&
-        cit->contentId != CONTENT_NONE && !cit->fingerprint.isEmpty() &&
-        cit->fingerprint == result.fingerprint && cit->relationshipsKnown) {
+    if (cit != m_cache.constEnd() && cit->language == language && cit->contentId != CONTENT_NONE &&
+        !cit->fingerprint.isEmpty() && cit->fingerprint == result.fingerprint &&
+        cit->relationshipsKnown) {
       result.cacheHit          = true;
       result.baseContentId     = cit->contentId;
       result.finalContentId    = cit->contentId;
@@ -1198,20 +1214,24 @@ BG3LocalizationContent::SingleModScanResult BG3LocalizationContent::computeSingl
     return result;
   }
 
-  QHash<QString, int>            scanBaseId;
+  QHash<QString, int>           scanBaseId;
   QHash<QString, QSet<QString>> scanUuids;
   scanBaseId.insert(modName, result.baseContentId);
   scanUuids.insert(modName, result.uuidKeys);
 
   const QPair<int, QString> classification =
-      applyTranslationModClassification(modName, result.baseContentId, validModNames(),
-                                        scanBaseId, scanUuids, preloadPersistentUuidKeys());
+      applyTranslationModClassification(modName,
+                                        result.baseContentId,
+                                        validModNames(),
+                                        scanBaseId,
+                                        scanUuids,
+                                        preloadPersistentUuidKeys());
   result.finalContentId    = classification.first;
   result.translationTarget = classification.second;
 
   if (result.finalContentId == CONTENT_EMBEDDED)
-    result.embeddedStrings = buildEmbeddedStringsForMod(result.modPath, language,
-                                                        &pakManifestCache, &metrics);
+    result.embeddedStrings =
+        buildEmbeddedStringsForMod(result.modPath, language, &pakManifestCache, &metrics);
 
   return result;
 }
@@ -1233,10 +1253,10 @@ void BG3LocalizationContent::applySingleModScanResult(const SingleModScanResult&
 
   CacheEntry  entry;
   QStringList linkedTranslations;
-  entry.language          = result.language;
-  entry.contentId         = result.finalContentId;
-  entry.fingerprint       = result.fingerprint;
-  entry.translationTarget = result.translationTarget;
+  entry.language           = result.language;
+  entry.contentId          = result.finalContentId;
+  entry.fingerprint        = result.fingerprint;
+  entry.translationTarget  = result.translationTarget;
   entry.relationshipsKnown = true;
 
   {
@@ -1278,8 +1298,11 @@ void BG3LocalizationContent::applySingleModScanResult(const SingleModScanResult&
   }
 
   if (entry.contentId == CONTENT_EMBEDDED && !result.embeddedStrings.isEmpty()) {
-    saveEmbeddedStringsBlob(result.modName, result.language, result.modPath,
-                            result.fingerprint, result.embeddedStrings);
+    saveEmbeddedStringsBlob(result.modName,
+                            result.language,
+                            result.modPath,
+                            result.fingerprint,
+                            result.embeddedStrings);
   }
 
   savePersistentFromMemory();
@@ -1317,7 +1340,7 @@ void BG3LocalizationContent::startNextQueuedAutoScan()
     if (m_scanning.load() || m_autoScanRunning || m_autoScanQueue.isEmpty())
       return;
 
-    modName = m_autoScanQueue.takeFirst();
+    modName           = m_autoScanQueue.takeFirst();
     m_autoScanRunning = true;
   }
 
@@ -1328,7 +1351,11 @@ void BG3LocalizationContent::startNextQueuedAutoScan()
   auto* thread = QThread::create([this, modName, language]() {
     const SingleModScanResult result = computeSingleModScan(modName, language);
     QMetaObject::invokeMethod(
-        this, [this, result]() { applySingleModScanResult(result); }, Qt::QueuedConnection);
+        this,
+        [this, result]() {
+          applySingleModScanResult(result);
+        },
+        Qt::QueuedConnection);
   });
 
   QObject::connect(thread, &QThread::finished, thread, &QThread::deleteLater);
@@ -1341,8 +1368,7 @@ void BG3LocalizationContent::startNextQueuedAutoScan()
 
 QString BG3LocalizationContent::currentLanguage() const
 {
-  QVariant v = m_organizer->pluginSetting(QStringLiteral("lwizard"),
-                                          QStringLiteral("language"));
+  QVariant v = m_organizer->pluginSetting(QStringLiteral("lwizard"), QStringLiteral("language"));
   if (!v.isValid())
     return QStringLiteral("English");
 
@@ -1356,11 +1382,10 @@ QString BG3LocalizationContent::currentLanguage() const
   return s.isEmpty() ? QStringLiteral("English") : s;
 }
 
-
-bool BG3LocalizationContent::pakHasLocalization(const QString& pakPath,
-                                                 const QString& language,
-                                                 PakManifestCache* pakManifestCache,
-                                                 ScanMetrics* metrics) const
+bool BG3LocalizationContent::pakHasLocalization(const QString&    pakPath,
+                                                const QString&    language,
+                                                PakManifestCache* pakManifestCache,
+                                                ScanMetrics*      metrics) const
 {
   const QString needle = QStringLiteral("Localization/") + language + QStringLiteral("/");
   for (const QString& entry : listPakFileEntries(pakPath, pakManifestCache, metrics)) {
@@ -1370,17 +1395,17 @@ bool BG3LocalizationContent::pakHasLocalization(const QString& pakPath,
   return false;
 }
 
-int BG3LocalizationContent::detectContentId(
-    std::shared_ptr<const MOBase::IFileTree> tree, const QString& language,
-    PakManifestCache* pakManifestCache, ScanMetrics* metrics) const
+int BG3LocalizationContent::detectContentId(std::shared_ptr<const MOBase::IFileTree> tree,
+                                            const QString&                           language,
+                                            PakManifestCache* pakManifestCache,
+                                            ScanMetrics*      metrics) const
 {
   auto* mod = m_organizer->modList()->getMod(tree->name());
   if (mod && mod->isSeparator())
     return CONTENT_NONE;
 
   // 1. Direct check: unpacked mod has Localization/{language}/ at its root
-  if (tree->exists(QStringLiteral("Localization/") + language,
-                   MOBase::FileTreeEntry::DIRECTORY))
+  if (tree->exists(QStringLiteral("Localization/") + language, MOBase::FileTreeEntry::DIRECTORY))
     return CONTENT_EMBEDDED;
 
   // 1b. Unpacked mod may keep localization under PAK_FILES/<something>/Localization/{language}/
@@ -1391,8 +1416,7 @@ int BG3LocalizationContent::detectContentId(
       auto sub = entry->astree();
       if (!sub)
         continue;
-      if (sub->exists(QStringLiteral("Localization/") + language,
-                      MOBase::FileTreeEntry::DIRECTORY))
+      if (sub->exists(QStringLiteral("Localization/") + language, MOBase::FileTreeEntry::DIRECTORY))
         return CONTENT_EMBEDDED;
     }
   }
@@ -1400,7 +1424,7 @@ int BG3LocalizationContent::detectContentId(
   // 2. Scan .pak files for embedded localization
   if (mod) {
     const QString modPath = mod->absolutePath();
-    QStringList paks;
+    QStringList   paks;
     collectPakPathsUnderMod(modPath, &paks);
     for (const QString& pakPath : paks) {
       if (pakHasLocalization(pakPath, language, pakManifestCache, metrics))
@@ -1425,7 +1449,7 @@ QSet<QString> BG3LocalizationContent::uuidKeysFromCompressed(const QByteArray& c
   const QByteArray json = qUncompress(compressedJson);
   if (json.isEmpty())
     return out;
-  QJsonParseError err;
+  QJsonParseError     err;
   const QJsonDocument doc = QJsonDocument::fromJson(json, &err);
   if (err.error != QJsonParseError::NoError || !doc.isObject())
     return out;
@@ -1435,23 +1459,25 @@ QSet<QString> BG3LocalizationContent::uuidKeysFromCompressed(const QByteArray& c
   return out;
 }
 
-QSet<QString> BG3LocalizationContent::discoverLanguagesInMod(
-    const QString& modAbsPath, PakManifestCache* pakManifestCache, ScanMetrics* metrics) const
+QSet<QString> BG3LocalizationContent::discoverLanguagesInMod(const QString&    modAbsPath,
+                                                             PakManifestCache* pakManifestCache,
+                                                             ScanMetrics*      metrics) const
 {
   QSet<QString> langs;
 
   const QDir locRoot(modAbsPath + QStringLiteral("/Localization"));
   if (locRoot.exists()) {
-    const QFileInfoList entries =
-        locRoot.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+    const QFileInfoList entries = locRoot.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
     for (const QFileInfo& fi : entries)
       langs.insert(fi.fileName());
   }
 
   const QDir pakFiles(modAbsPath + QStringLiteral("/PAK_FILES"));
   if (pakFiles.exists()) {
-    QDirIterator locIt(pakFiles.path(), QStringList{QStringLiteral("Localization")},
-                       QDir::Dirs, QDirIterator::Subdirectories);
+    QDirIterator locIt(pakFiles.path(),
+                       QStringList{QStringLiteral("Localization")},
+                       QDir::Dirs,
+                       QDirIterator::Subdirectories);
     while (locIt.hasNext()) {
       locIt.next();
       const QFileInfoList langDirs =
@@ -1463,13 +1489,12 @@ QSet<QString> BG3LocalizationContent::discoverLanguagesInMod(
 
   QStringList paks;
   collectPakPathsUnderMod(modAbsPath, &paks);
-  const QRegularExpression re(
-      QStringLiteral(R"(Localization[/\\]([^/\\]+)[/\\])"),
-      QRegularExpression::CaseInsensitiveOption);
+  const QRegularExpression re(QStringLiteral(R"(Localization[/\\]([^/\\]+)[/\\])"),
+                              QRegularExpression::CaseInsensitiveOption);
   for (const QString& pakPath : paks) {
     const QStringList pakLines = listPakFileEntries(pakPath, pakManifestCache, metrics);
     for (const QString& line : pakLines) {
-      const QString n = normalizedPakEntry(line);
+      const QString                 n = normalizedPakEntry(line);
       const QRegularExpressionMatch m = re.match(n);
       if (m.hasMatch())
         langs.insert(m.captured(1));
@@ -1479,8 +1504,9 @@ QSet<QString> BG3LocalizationContent::discoverLanguagesInMod(
   return langs;
 }
 
-QSet<QString> BG3LocalizationContent::uuidKeysUnionAllLanguages(
-    const QString& modAbsPath, PakManifestCache* pakManifestCache, ScanMetrics* metrics) const
+QSet<QString> BG3LocalizationContent::uuidKeysUnionAllLanguages(const QString&    modAbsPath,
+                                                                PakManifestCache* pakManifestCache,
+                                                                ScanMetrics*      metrics) const
 {
   const QSet<QString> langs = discoverLanguagesInMod(modAbsPath, pakManifestCache, metrics);
   QSet<QString>       out;
@@ -1494,23 +1520,22 @@ QSet<QString> BG3LocalizationContent::uuidKeysUnionAllLanguages(
 QSet<QString> BG3LocalizationContent::embeddedUuidKeysUnionFromPersistent(
     const QString& modName) const
 {
-  QSet<QString> out;
-  const QByteArray raw =
-      variantToJsonBytes(m_organizer->persistent(QStringLiteral("lwizard"),
-                                                 kStringsPersistentKey(), QVariant()));
+  QSet<QString>    out;
+  const QByteArray raw = variantToJsonBytes(
+      m_organizer->persistent(QStringLiteral("lwizard"), kStringsPersistentKey(), QVariant()));
   if (raw.isEmpty())
     return out;
 
-  QJsonParseError err;
+  QJsonParseError     err;
   const QJsonDocument doc = QJsonDocument::fromJson(raw, &err);
   if (err.error != QJsonParseError::NoError || !doc.isObject())
     return out;
 
-  const QJsonObject mods = doc.object()[QStringLiteral("mods")].toObject();
-  const QJsonObject modO = mods[modName].toObject();
+  const QJsonObject mods  = doc.object()[QStringLiteral("mods")].toObject();
+  const QJsonObject modO  = mods[modName].toObject();
   const QJsonObject langs = modO[QStringLiteral("langs")].toObject();
   for (const QString& langKey : langs.keys()) {
-    const QJsonObject le = langs[langKey].toObject();
+    const QJsonObject le  = langs[langKey].toObject();
     const QString     b64 = le[QStringLiteral("data")].toString();
     if (b64.isEmpty())
       continue;
@@ -1522,20 +1547,19 @@ QSet<QString> BG3LocalizationContent::embeddedUuidKeysUnionFromPersistent(
 QHash<QString, QSet<QString>> BG3LocalizationContent::preloadPersistentUuidKeys() const
 {
   QHash<QString, QSet<QString>> out;
-  const QByteArray raw =
-      variantToJsonBytes(m_organizer->persistent(QStringLiteral("lwizard"),
-                                                 kStringsPersistentKey(), QVariant()));
+  const QByteArray              raw = variantToJsonBytes(
+      m_organizer->persistent(QStringLiteral("lwizard"), kStringsPersistentKey(), QVariant()));
   if (raw.isEmpty())
     return out;
 
-  QJsonParseError err;
+  QJsonParseError     err;
   const QJsonDocument doc = QJsonDocument::fromJson(raw, &err);
   if (err.error != QJsonParseError::NoError || !doc.isObject())
     return out;
 
   const QJsonObject mods = doc.object()[QStringLiteral("mods")].toObject();
   for (auto modIt = mods.constBegin(); modIt != mods.constEnd(); ++modIt) {
-    QSet<QString> modUuids;
+    QSet<QString>     modUuids;
     const QJsonObject langs = modIt->toObject()[QStringLiteral("langs")].toObject();
     for (auto langIt = langs.constBegin(); langIt != langs.constEnd(); ++langIt) {
       const QString b64 = langIt->toObject()[QStringLiteral("data")].toString();
@@ -1551,13 +1575,13 @@ QHash<QString, QSet<QString>> BG3LocalizationContent::preloadPersistentUuidKeys(
 }
 
 QPair<int, QString> BG3LocalizationContent::applyTranslationModClassification(
-    const QString& modName,
-    int             baseContentId,
-    const QStringList& allModNames,
-    const QHash<QString, int>&            baseIdThisScan,
+    const QString&                       modName,
+    int                                  baseContentId,
+    const QStringList&                   allModNames,
+    const QHash<QString, int>&           baseIdThisScan,
     const QHash<QString, QSet<QString>>& uuidsThisScan,
     const QHash<QString, QSet<QString>>& persistentUuidsByMod,
-    const QHash<QString, QStringList>& uuidIndexByUuid) const
+    const QHash<QString, QStringList>&   uuidIndexByUuid) const
 {
   const QSet<QString> candUuids = uuidsThisScan.value(modName);
 
@@ -1566,7 +1590,7 @@ QPair<int, QString> BG3LocalizationContent::applyTranslationModClassification(
     if (b == CONTENT_NONE) {
       auto lock = QMutexLocker(&m_cacheMutex);
       auto cit  = m_cache.constFind(refName);
-      b           = cit == m_cache.constEnd() ? CONTENT_NONE : cit->contentId;
+      b         = cit == m_cache.constEnd() ? CONTENT_NONE : cit->contentId;
     }
     return b;
   };
@@ -1641,83 +1665,83 @@ QPair<int, QString> BG3LocalizationContent::applyTranslationModClassification(
 QByteArray BG3LocalizationContent::loadEmbeddedStringsBlob(const QString& modName,
                                                            const QString& lang) const
 {
-  const QByteArray raw =
-      variantToJsonBytes(m_organizer->persistent(QStringLiteral("lwizard"),
-                                                 kStringsPersistentKey(), QVariant()));
+  const QByteArray raw = variantToJsonBytes(
+      m_organizer->persistent(QStringLiteral("lwizard"), kStringsPersistentKey(), QVariant()));
   if (raw.isEmpty())
     return {};
 
-  QJsonParseError err;
+  QJsonParseError     err;
   const QJsonDocument doc = QJsonDocument::fromJson(raw, &err);
   if (err.error != QJsonParseError::NoError || !doc.isObject())
     return {};
 
-  const QJsonObject root = doc.object();
-  const QJsonObject mods = root[QStringLiteral("mods")].toObject();
-  const QJsonObject modO = mods[modName].toObject();
+  const QJsonObject root  = doc.object();
+  const QJsonObject mods  = root[QStringLiteral("mods")].toObject();
+  const QJsonObject modO  = mods[modName].toObject();
   const QJsonObject langs = modO[QStringLiteral("langs")].toObject();
   const QJsonObject le    = langs[lang].toObject();
-  const QString b64       = le[QStringLiteral("data")].toString();
+  const QString     b64   = le[QStringLiteral("data")].toString();
   if (b64.isEmpty())
     return {};
   return QByteArray::fromBase64(b64.toUtf8());
 }
 
-void BG3LocalizationContent::saveEmbeddedStringsBlob(const QString& modName, const QString& lang,
-                                                     const QString& modPath,
-                                                     const QString& fingerprint,
+void BG3LocalizationContent::saveEmbeddedStringsBlob(const QString&    modName,
+                                                     const QString&    lang,
+                                                     const QString&    modPath,
+                                                     const QString&    fingerprint,
                                                      const QByteArray& compressedJson)
 {
   if (compressedJson.isEmpty())
     return;
 
-  const QByteArray raw =
-      variantToJsonBytes(m_organizer->persistent(QStringLiteral("lwizard"),
-                                                 kStringsPersistentKey(), QVariant()));
+  const QByteArray raw = variantToJsonBytes(
+      m_organizer->persistent(QStringLiteral("lwizard"), kStringsPersistentKey(), QVariant()));
   QJsonObject root;
   if (!raw.isEmpty()) {
-    QJsonParseError err;
+    QJsonParseError     err;
     const QJsonDocument existing = QJsonDocument::fromJson(raw, &err);
     if (err.error == QJsonParseError::NoError && existing.isObject())
       root = existing.object();
   }
 
-  root[QStringLiteral("v")] = 1;
-  QJsonObject mods          = root[QStringLiteral("mods")].toObject();
-  QJsonObject modObj        = mods[modName].toObject();
+  root[QStringLiteral("v")]      = 1;
+  QJsonObject mods               = root[QStringLiteral("mods")].toObject();
+  QJsonObject modObj             = mods[modName].toObject();
   modObj[QStringLiteral("path")] = modPath;
   QJsonObject langs              = modObj[QStringLiteral("langs")].toObject();
 
   QJsonObject le;
-  le[QStringLiteral("fp")]   = fingerprint;
-  le[QStringLiteral("data")] = QString::fromUtf8(compressedJson.toBase64());
-  langs[lang]                = le;
+  le[QStringLiteral("fp")]        = fingerprint;
+  le[QStringLiteral("data")]      = QString::fromUtf8(compressedJson.toBase64());
+  langs[lang]                     = le;
   modObj[QStringLiteral("langs")] = langs;
-  mods[modName]                    = modObj;
+  mods[modName]                   = modObj;
 
   if (cacheOnlyCurrentLanguage())
     filterModsJsonToSingleLanguage(mods, currentLanguage());
 
   root[QStringLiteral("mods")] = mods;
-  m_organizer->setPersistent(QStringLiteral("lwizard"), kStringsPersistentKey(),
-                             QVariant(QJsonDocument(root).toJson(QJsonDocument::Compact)), true);
+  m_organizer->setPersistent(QStringLiteral("lwizard"),
+                             kStringsPersistentKey(),
+                             QVariant(QJsonDocument(root).toJson(QJsonDocument::Compact)),
+                             true);
 }
 
 void BG3LocalizationContent::saveEmbeddedStringsBlobs(
     const QHash<QString, QByteArray>& compressedJsonByMod,
-    const QHash<QString, QString>& modPathByMod,
-    const QHash<QString, QString>& fingerprintByMod,
-    const QString& lang)
+    const QHash<QString, QString>&    modPathByMod,
+    const QHash<QString, QString>&    fingerprintByMod,
+    const QString&                    lang)
 {
   if (compressedJsonByMod.isEmpty())
     return;
 
-  const QByteArray raw =
-      variantToJsonBytes(m_organizer->persistent(QStringLiteral("lwizard"),
-                                                 kStringsPersistentKey(), QVariant()));
+  const QByteArray raw = variantToJsonBytes(
+      m_organizer->persistent(QStringLiteral("lwizard"), kStringsPersistentKey(), QVariant()));
   QJsonObject root;
   if (!raw.isEmpty()) {
-    QJsonParseError err;
+    QJsonParseError     err;
     const QJsonDocument existing = QJsonDocument::fromJson(raw, &err);
     if (err.error == QJsonParseError::NoError && existing.isObject())
       root = existing.object();
@@ -1736,40 +1760,42 @@ void BG3LocalizationContent::saveEmbeddedStringsBlobs(
     if (modPath.isEmpty() || fingerprint.isEmpty())
       continue;
 
-    QJsonObject modObj        = mods[modName].toObject();
+    QJsonObject modObj             = mods[modName].toObject();
     modObj[QStringLiteral("path")] = modPath;
     QJsonObject langs              = modObj[QStringLiteral("langs")].toObject();
 
     QJsonObject le;
-    le[QStringLiteral("fp")]   = fingerprint;
-    le[QStringLiteral("data")] = QString::fromUtf8(it.value().toBase64());
-    langs[lang]                = le;
+    le[QStringLiteral("fp")]        = fingerprint;
+    le[QStringLiteral("data")]      = QString::fromUtf8(it.value().toBase64());
+    langs[lang]                     = le;
     modObj[QStringLiteral("langs")] = langs;
-    mods[modName]                    = modObj;
+    mods[modName]                   = modObj;
   }
 
   if (cacheOnlyCurrentLanguage())
     filterModsJsonToSingleLanguage(mods, lang);
 
   root[QStringLiteral("mods")] = mods;
-  m_organizer->setPersistent(QStringLiteral("lwizard"), kStringsPersistentKey(),
-                             QVariant(QJsonDocument(root).toJson(QJsonDocument::Compact)), true);
+  m_organizer->setPersistent(QStringLiteral("lwizard"),
+                             kStringsPersistentKey(),
+                             QVariant(QJsonDocument(root).toJson(QJsonDocument::Compact)),
+                             true);
 }
 
-QMap<QString, QString>
-BG3LocalizationContent::parseEmbeddedStringsCompressedJson(const QByteArray& compressedJson) const
+QMap<QString, QString> BG3LocalizationContent::parseEmbeddedStringsCompressedJson(
+    const QByteArray& compressedJson) const
 {
   const QByteArray json = qUncompress(compressedJson);
   if (json.isEmpty())
     return {};
 
-  QJsonParseError err;
+  QJsonParseError     err;
   const QJsonDocument doc = QJsonDocument::fromJson(json, &err);
   if (err.error != QJsonParseError::NoError || !doc.isObject())
     return {};
 
   QMap<QString, QString> out;
-  const QJsonObject obj = doc.object();
+  const QJsonObject      obj = doc.object();
   for (auto it = obj.begin(); it != obj.end(); ++it)
     out[it.key()] = it->toString();
   return out;
@@ -1791,7 +1817,7 @@ QMap<QString, QString> BG3LocalizationContent::loadStringsSync(const QString& mo
 
 QMap<QString, QString> BG3LocalizationContent::embeddedStringsFor(const QString& modName) const
 {
-  const QString lang = currentLanguage();
+  const QString    lang = currentLanguage();
   const QByteArray blob = loadEmbeddedStringsBlob(modName, lang);
   if (blob.isEmpty())
     return {};
@@ -1802,18 +1828,16 @@ QMap<QString, QString> BG3LocalizationContent::embeddedStringsFor(const QString&
     return {};
   const QString liveFp = localizationFingerprint(mod->absolutePath());
 
-  const QByteArray raw =
-      variantToJsonBytes(m_organizer->persistent(QStringLiteral("lwizard"),
-                                                 kStringsPersistentKey(), QVariant()));
-  QJsonParseError err;
+  const QByteArray raw = variantToJsonBytes(
+      m_organizer->persistent(QStringLiteral("lwizard"), kStringsPersistentKey(), QVariant()));
+  QJsonParseError     err;
   const QJsonDocument doc = QJsonDocument::fromJson(raw, &err);
   if (err.error != QJsonParseError::NoError || !doc.isObject())
     return {};
-  const QJsonObject mods = doc.object()[QStringLiteral("mods")].toObject();
-  const QJsonObject modO = mods[modName].toObject();
-  const QJsonObject le =
-      modO[QStringLiteral("langs")].toObject()[lang].toObject();
-  const QString storedFp = le[QStringLiteral("fp")].toString();
+  const QJsonObject mods     = doc.object()[QStringLiteral("mods")].toObject();
+  const QJsonObject modO     = mods[modName].toObject();
+  const QJsonObject le       = modO[QStringLiteral("langs")].toObject()[lang].toObject();
+  const QString     storedFp = le[QStringLiteral("fp")].toString();
   if (storedFp.isEmpty() || storedFp != liveFp)
     return {};
 
@@ -1821,7 +1845,7 @@ QMap<QString, QString> BG3LocalizationContent::embeddedStringsFor(const QString&
 }
 
 QByteArray BG3LocalizationContent::locaFileToJsonMapCompressed(const QString& locaAbsPath,
-                                                               ScanMetrics* metrics) const
+                                                               ScanMetrics*   metrics) const
 {
   Q_UNUSED(metrics)
   QFile f(locaAbsPath);
@@ -1840,7 +1864,7 @@ QByteArray BG3LocalizationContent::mergeJsonMapsCompressed(
     const QByteArray json = qUncompress(c);
     if (json.isEmpty())
       continue;
-    QJsonParseError err;
+    QJsonParseError     err;
     const QJsonDocument doc = QJsonDocument::fromJson(json, &err);
     if (err.error != QJsonParseError::NoError || !doc.isObject())
       continue;
@@ -1855,13 +1879,13 @@ QByteArray BG3LocalizationContent::mergeJsonMapsCompressed(
 }
 
 void BG3LocalizationContent::collectPakPathsUnderMod(const QString& modAbsPath,
-                                                     QStringList* outPaks) const
+                                                     QStringList*   outPaks) const
 {
   if (!outPaks)
     return;
 
   QSet<QString> seen;
-  auto add = [&](const QString& p) {
+  auto          add = [&](const QString& p) {
     if (seen.contains(p))
       return;
     seen.insert(p);
@@ -1878,7 +1902,9 @@ void BG3LocalizationContent::collectPakPathsUnderMod(const QString& modAbsPath,
 
   const QDir pakRoot(modAbsPath + QStringLiteral("/PAK_FILES"));
   if (pakRoot.exists()) {
-    QDirIterator it(pakRoot.path(), QStringList{QStringLiteral("*.pak")}, QDir::Files,
+    QDirIterator it(pakRoot.path(),
+                    QStringList{QStringLiteral("*.pak")},
+                    QDir::Files,
                     QDirIterator::Subdirectories);
     while (it.hasNext()) {
       it.next();
@@ -1887,9 +1913,9 @@ void BG3LocalizationContent::collectPakPathsUnderMod(const QString& modAbsPath,
   }
 }
 
-QStringList BG3LocalizationContent::listPakFileEntries(const QString& pakPath,
+QStringList BG3LocalizationContent::listPakFileEntries(const QString&    pakPath,
                                                        PakManifestCache* pakManifestCache,
-                                                       ScanMetrics* metrics) const
+                                                       ScanMetrics*      metrics) const
 {
   Q_UNUSED(metrics)
   if (pakManifestCache) {
@@ -1904,11 +1930,10 @@ QStringList BG3LocalizationContent::listPakFileEntries(const QString& pakPath,
   return entries;
 }
 
-
-QByteArray BG3LocalizationContent::buildEmbeddedStringsForMod(const QString& modAbsPath,
-                                                              const QString& lang,
+QByteArray BG3LocalizationContent::buildEmbeddedStringsForMod(const QString&    modAbsPath,
+                                                              const QString&    lang,
                                                               PakManifestCache* pakManifestCache,
-                                                              ScanMetrics* metrics) const
+                                                              ScanMetrics*      metrics) const
 {
   QList<QByteArray> parts;
 
@@ -1916,8 +1941,8 @@ QByteArray BG3LocalizationContent::buildEmbeddedStringsForMod(const QString& mod
     QDir d(baseDir);
     if (!d.exists())
       return;
-    QDirIterator it(d.path(), QStringList{QStringLiteral("*.loca")},
-                    QDir::Files, QDirIterator::Subdirectories);
+    QDirIterator it(
+        d.path(), QStringList{QStringLiteral("*.loca")}, QDir::Files, QDirIterator::Subdirectories);
     while (it.hasNext()) {
       it.next();
       const QByteArray one = locaFileToJsonMapCompressed(it.filePath(), metrics);
@@ -1930,8 +1955,8 @@ QByteArray BG3LocalizationContent::buildEmbeddedStringsForMod(const QString& mod
     QDir d(baseDir);
     if (!d.exists())
       return;
-    QDirIterator it(d.path(), QStringList{QStringLiteral("*.xml")},
-                    QDir::Files, QDirIterator::Subdirectories);
+    QDirIterator it(
+        d.path(), QStringList{QStringLiteral("*.xml")}, QDir::Files, QDirIterator::Subdirectories);
     while (it.hasNext()) {
       it.next();
       const QByteArray one = localizationXmlFileToJsonMapCompressed(it.filePath());
@@ -1950,8 +1975,10 @@ QByteArray BG3LocalizationContent::buildEmbeddedStringsForMod(const QString& mod
   {
     QDir pakDir(modAbsPath + QStringLiteral("/PAK_FILES"));
     if (pakDir.exists()) {
-      QDirIterator it(pakDir.path(), QStringList{QStringLiteral("Localization")},
-                      QDir::Dirs, QDirIterator::Subdirectories);
+      QDirIterator it(pakDir.path(),
+                      QStringList{QStringLiteral("Localization")},
+                      QDir::Dirs,
+                      QDirIterator::Subdirectories);
       while (it.hasNext()) {
         it.next();
         const QString locRoot = it.filePath() + QStringLiteral("/") + lang;
@@ -1982,8 +2009,8 @@ QByteArray BG3LocalizationContent::buildEmbeddedStringsForMod(const QString& mod
       if (raw.isEmpty())
         continue;
 
-      const QByteArray one = isLoca ? LWizardPakReader::locaBytesToJsonCompressed(raw) :
-                                      localizationXmlBytesToJsonMapCompressed(raw);
+      const QByteArray one = isLoca ? LWizardPakReader::locaBytesToJsonCompressed(raw)
+                                    : localizationXmlBytesToJsonMapCompressed(raw);
       if (!one.isEmpty())
         parts.append(one);
     }

@@ -28,23 +28,29 @@
 // Language list — must match lwizard_plugin.cpp settings() order
 // ---------------------------------------------------------------------------
 static const QStringList k_languages = {
-    QStringLiteral("English"),          QStringLiteral("French"),
-    QStringLiteral("German"),           QStringLiteral("Italian"),
-    QStringLiteral("Spanish"),          QStringLiteral("Polish"),
-    QStringLiteral("Russian"),          QStringLiteral("ChineseSimplified"),
-    QStringLiteral("PortugueseBrazil"), QStringLiteral("Turkish"),
-    QStringLiteral("Czech"),            QStringLiteral("Ukrainian"),
-    QStringLiteral("Korean"),           QStringLiteral("Japanese"),
+    QStringLiteral("English"),
+    QStringLiteral("French"),
+    QStringLiteral("German"),
+    QStringLiteral("Italian"),
+    QStringLiteral("Spanish"),
+    QStringLiteral("Polish"),
+    QStringLiteral("Russian"),
+    QStringLiteral("ChineseSimplified"),
+    QStringLiteral("PortugueseBrazil"),
+    QStringLiteral("Turkish"),
+    QStringLiteral("Czech"),
+    QStringLiteral("Ukrainian"),
+    QStringLiteral("Korean"),
+    QStringLiteral("Japanese"),
 };
 
 // ---------------------------------------------------------------------------
 
-LWizardWindow::LWizardWindow(MOBase::IOrganizer* organizer,
+LWizardWindow::LWizardWindow(MOBase::IOrganizer*                     organizer,
                              std::shared_ptr<BG3LocalizationContent> content,
-                             LWizardNexusApi* nexusApi,
-                             QWidget* parent)
-    : QDialog(parent), m_organizer(organizer), m_content(std::move(content))
-    , m_nexusApi(nexusApi)
+                             LWizardNexusApi*                        nexusApi,
+                             QWidget*                                parent)
+    : QDialog(parent), m_organizer(organizer), m_content(std::move(content)), m_nexusApi(nexusApi)
 {
   setWindowTitle(tr("LWizard"));
   setMinimumSize(900, 600);
@@ -70,8 +76,7 @@ void LWizardWindow::setupUi()
   root->addWidget(m_tabs);
 
   // Close button at bottom
-  auto* buttons =
-      new QDialogButtonBox(QDialogButtonBox::Close, Qt::Horizontal, this);
+  auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, Qt::Horizontal, this);
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::close);
   root->addWidget(buttons);
 }
@@ -84,15 +89,15 @@ void LWizardWindow::buildSettingsTab(QTabWidget* tabs)
   layout->setSpacing(10);
 
   // Language group
-  auto* grp     = new QGroupBox(tr("Localization scanning"), page);
-  auto* form    = new QFormLayout(grp);
+  auto* grp       = new QGroupBox(tr("Localization scanning"), page);
+  auto* form      = new QFormLayout(grp);
   m_languageCombo = new QComboBox(grp);
   m_languageCombo->addItems(k_languages);
 
   {
     QSignalBlocker block(m_languageCombo);
-    const QString saved = currentSavedLanguage();
-    const int idx       = k_languages.indexOf(saved);
+    const QString  saved = currentSavedLanguage();
+    const int      idx   = k_languages.indexOf(saved);
     m_languageCombo->setCurrentIndex(idx >= 0 ? idx : 0);
   }
 
@@ -104,24 +109,24 @@ void LWizardWindow::buildSettingsTab(QTabWidget* tabs)
       grp);
   {
     QSignalBlocker block(m_cacheOnlyCurrentLang);
-    const QVariant cacheOnly =
-        m_organizer->pluginSetting(QStringLiteral("lwizard"),
-                                   QStringLiteral("cache_only_current_language"));
+    const QVariant cacheOnly = m_organizer->pluginSetting(
+        QStringLiteral("lwizard"), QStringLiteral("cache_only_current_language"));
     m_cacheOnlyCurrentLang->setChecked(cacheOnly.isValid() ? cacheOnly.toBool() : false);
   }
   form->addRow(tr("Disk cache:"), m_cacheOnlyCurrentLang);
 
   layout->addWidget(grp);
 
-  connect(m_languageCombo, &QComboBox::currentIndexChanged, this,
-          &LWizardWindow::saveSettings);
-  connect(m_cacheOnlyCurrentLang, &QCheckBox::toggled, this,
+  connect(m_languageCombo, &QComboBox::currentIndexChanged, this, &LWizardWindow::saveSettings);
+  connect(m_cacheOnlyCurrentLang,
+          &QCheckBox::toggled,
+          this,
           &LWizardWindow::onCacheOnlyCurrentLangToggled);
 
   // Scan button row
-  m_scanBtn = new QPushButton(tr("Scan mods"), page);
+  m_scanBtn       = new QPushButton(tr("Scan mods"), page);
   m_clearCacheBtn = new QPushButton(tr("Clear all caches"), page);
-  m_scanStatus = new QLabel(tr("Idle"), page);
+  m_scanStatus    = new QLabel(tr("Idle"), page);
   m_scanStatus->setVisible(false);
   m_scanProgress = new QProgressBar(page);
   m_scanProgress->setVisible(false);
@@ -138,10 +143,10 @@ void LWizardWindow::buildSettingsTab(QTabWidget* tabs)
 
   connect(m_scanBtn, &QPushButton::clicked, this, &LWizardWindow::startScan);
   connect(m_clearCacheBtn, &QPushButton::clicked, this, &LWizardWindow::clearAllCaches);
-  connect(m_content.get(), &BG3LocalizationContent::scanProgress,
-          this, &LWizardWindow::onScanProgress);
-  connect(m_content.get(), &BG3LocalizationContent::scanFinished,
-          this, &LWizardWindow::onScanFinished);
+  connect(
+      m_content.get(), &BG3LocalizationContent::scanProgress, this, &LWizardWindow::onScanProgress);
+  connect(
+      m_content.get(), &BG3LocalizationContent::scanFinished, this, &LWizardWindow::onScanFinished);
 
   tabs->addTab(page, tr("Settings"));
 }
@@ -199,8 +204,7 @@ void LWizardWindow::buildLogsTab(QTabWidget* tabs)
   });
 
   // Live updates
-  connect(&LWizardLog::instance(), &LWizardLog::entryAdded, this,
-          &LWizardWindow::onLogEntry);
+  connect(&LWizardLog::instance(), &LWizardLog::entryAdded, this, &LWizardWindow::onLogEntry);
 
   tabs->addTab(page, tr("Logs"));
 }
@@ -211,8 +215,7 @@ void LWizardWindow::buildLogsTab(QTabWidget* tabs)
 
 QString LWizardWindow::currentSavedLanguage() const
 {
-  QVariant v = m_organizer->pluginSetting(QStringLiteral("lwizard"),
-                                          QStringLiteral("language"));
+  QVariant v = m_organizer->pluginSetting(QStringLiteral("lwizard"), QStringLiteral("language"));
   if (!v.isValid())
     return QStringLiteral("English");
   if (v.typeId() == QMetaType::QStringList) {
@@ -230,16 +233,14 @@ QString LWizardWindow::currentSavedLanguage() const
 void LWizardWindow::saveSettings()
 {
   const QString lang = m_languageCombo->currentText();
-  m_organizer->setPluginSetting(QStringLiteral("lwizard"), QStringLiteral("language"),
-                                lang);
+  m_organizer->setPluginSetting(QStringLiteral("lwizard"), QStringLiteral("language"), lang);
   LWizardLog::info(QStringLiteral("Language set to: ") + lang);
 }
 
 void LWizardWindow::onCacheOnlyCurrentLangToggled(bool checked)
 {
-  m_organizer->setPluginSetting(QStringLiteral("lwizard"),
-                                QStringLiteral("cache_only_current_language"),
-                                QVariant(checked));
+  m_organizer->setPluginSetting(
+      QStringLiteral("lwizard"), QStringLiteral("cache_only_current_language"), QVariant(checked));
 }
 
 void LWizardWindow::startScan()
@@ -268,15 +269,18 @@ void LWizardWindow::startScan()
 void LWizardWindow::clearAllCaches()
 {
   const int answer = QMessageBox::warning(
-      this, tr("Clear LWizard caches"),
+      this,
+      tr("Clear LWizard caches"),
       tr("Clear all LWizard scan caches? This removes Content-column scan results and "
          "embedded string caches. Saved translations and Nexus settings are kept."),
-      QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+      QMessageBox::Yes | QMessageBox::No,
+      QMessageBox::No);
   if (answer != QMessageBox::Yes)
     return;
 
   if (!m_content->clearAllCaches()) {
-    QMessageBox::information(this, tr("Clear LWizard caches"),
+    QMessageBox::information(this,
+                             tr("Clear LWizard caches"),
                              tr("A scan is running. Wait for it to finish, then clear caches."));
     return;
   }

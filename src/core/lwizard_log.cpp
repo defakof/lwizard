@@ -11,16 +11,24 @@ LWizardLog& LWizardLog::instance()
   return s_instance;
 }
 
-void LWizardLog::debug(const QString& msg) { instance().append(QStringLiteral("DBG"), msg); }
-void LWizardLog::info(const QString& msg)  { instance().append(QStringLiteral("INF"), msg); }
-void LWizardLog::warn(const QString& msg)  { instance().append(QStringLiteral("WRN"), msg); }
+void LWizardLog::debug(const QString& msg)
+{
+  instance().append(QStringLiteral("DBG"), msg);
+}
+void LWizardLog::info(const QString& msg)
+{
+  instance().append(QStringLiteral("INF"), msg);
+}
+void LWizardLog::warn(const QString& msg)
+{
+  instance().append(QStringLiteral("WRN"), msg);
+}
 
 void LWizardLog::append(const QString& level, const QString& msg)
 {
   const QString entry =
       QStringLiteral("[%1 %2] %3")
-          .arg(QDateTime::currentDateTime().toString(QStringLiteral("hh:mm:ss")), level,
-               msg);
+          .arg(QDateTime::currentDateTime().toString(QStringLiteral("hh:mm:ss")), level, msg);
 
   {
     auto lock = QMutexLocker(&m_mutex);
@@ -33,8 +41,12 @@ void LWizardLog::append(const QString& level, const QString& msg)
   if (QThread::currentThread() == thread()) {
     emit entryAdded(entry);
   } else {
-    QMetaObject::invokeMethod(this, [this, entry]() { emit entryAdded(entry); },
-                              Qt::QueuedConnection);
+    QMetaObject::invokeMethod(
+        this,
+        [this, entry]() {
+          emit entryAdded(entry);
+        },
+        Qt::QueuedConnection);
   }
 }
 

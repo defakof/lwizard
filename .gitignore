@@ -7,4 +7,19 @@ build-local.ps1
 *.ilk
 *.pdb
 .vs/
+
+# AI assistant / agent-local files
 .claude/
+.codex/
+.agents/
+.cursor/
+.continue/
+.aider*
+.mcp.*
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+codex-*.md
+ai-*.md
+*.ai.md
+*.prompt.md

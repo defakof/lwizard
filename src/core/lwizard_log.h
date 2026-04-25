@@ -31,15 +31,15 @@ signals:
   void entryAdded(const QString& entry);
 
 private:
-  LWizardLog()  = default;
-  ~LWizardLog() = default;
+  LWizardLog()                             = default;
+  ~LWizardLog()                            = default;
   LWizardLog(const LWizardLog&)            = delete;
   LWizardLog& operator=(const LWizardLog&) = delete;
 
   void append(const QString& level, const QString& msg);
 
   mutable QMutex m_mutex;
-  QStringList m_entries;
+  QStringList    m_entries;
 
   static constexpr int k_maxEntries = 2000;
 };

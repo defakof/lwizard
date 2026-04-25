@@ -13,16 +13,16 @@ class LWizardUnpackPlugin : public MOBase::IPluginTool
 public:
   LWizardUnpackPlugin() = default;
 
-  bool init(MOBase::IOrganizer* organizer) override;
-  QString name() const override;
-  QString author() const override;
-  QString description() const override;
-  MOBase::VersionInfo version() const override;
+  bool                         init(MOBase::IOrganizer* organizer) override;
+  QString                      name() const override;
+  QString                      author() const override;
+  QString                      description() const override;
+  MOBase::VersionInfo          version() const override;
   QList<MOBase::PluginSetting> settings() const override;
 
   QString displayName() const override;
   QString tooltip() const override;
-  QIcon icon() const override;
+  QIcon   icon() const override;
 
 public Q_SLOTS:
   void display() const override;

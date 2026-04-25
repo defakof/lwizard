@@ -23,22 +23,25 @@ class HtmlItemDelegate : public QStyledItemDelegate
 public:
   explicit HtmlItemDelegate(QObject* parent = nullptr);
 
-  void paint(QPainter* painter, const QStyleOptionViewItem& option,
-             const QModelIndex& index) const override;
+  void paint(QPainter*                   painter,
+             const QStyleOptionViewItem& option,
+             const QModelIndex&          index) const override;
 
-  QSize sizeHint(const QStyleOptionViewItem& option,
-                 const QModelIndex& index) const override;
+  QSize sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const override;
 
-  QWidget* createEditor(QWidget* parent, const QStyleOptionViewItem& option,
-                        const QModelIndex& index) const override;
+  QWidget* createEditor(QWidget*                    parent,
+                        const QStyleOptionViewItem& option,
+                        const QModelIndex&          index) const override;
 
   void setEditorData(QWidget* editor, const QModelIndex& index) const override;
 
-  void setModelData(QWidget* editor, QAbstractItemModel* model,
-                    const QModelIndex& index) const override;
+  void setModelData(QWidget*            editor,
+                    QAbstractItemModel* model,
+                    const QModelIndex&  index) const override;
 
-  void updateEditorGeometry(QWidget* editor, const QStyleOptionViewItem& option,
-                            const QModelIndex& index) const override;
+  void updateEditorGeometry(QWidget*                    editor,
+                            const QStyleOptionViewItem& option,
+                            const QModelIndex&          index) const override;
 
   void destroyEditor(QWidget* editor, const QModelIndex& index) const override;
 
@@ -46,7 +49,7 @@ public:
   static QString toDisplayHtml(const QString& rawText);
 
 private:
-  mutable QModelIndex m_editingIndex;   // index currently open in an editor
+  mutable QModelIndex m_editingIndex; // index currently open in an editor
 
   static constexpr int k_minRowHeight = 36;
   static constexpr int k_maxRowHeight = 240;

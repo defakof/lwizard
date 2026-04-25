@@ -26,7 +26,8 @@ bool LWizardPlugin::init(MOBase::IOrganizer* organizer)
   // Nexus API — persistent, outlives any window instance.
   m_nexusApi = new LWizardNexusApi(this);
   // Connect results back to content column (updates CONTENT_UNAVAILABLE → CONTENT_AVAILABLE)
-  QObject::connect(m_nexusApi, &LWizardNexusApi::translationsReady,
+  QObject::connect(m_nexusApi,
+                   &LWizardNexusApi::translationsReady,
                    [this](const QString& modName, const QList<NexusTranslationFile>& files) {
                      if (files.isEmpty())
                        return;
@@ -39,12 +40,12 @@ bool LWizardPlugin::init(MOBase::IOrganizer* organizer)
 
   // After any cache update, trigger a soft MO2 refresh so the Content
   // column re-queries getContentsFor() and picks up the newly cached results.
-  QObject::connect(m_localizationContent.get(), &BG3LocalizationContent::contentCacheUpdated,
-                   [this]() {
-                     m_organizer->refresh(false);
-                     if (m_modListUiPatch)
-                       m_modListUiPatch->refreshFromSelection();
-                   });
+  QObject::connect(
+      m_localizationContent.get(), &BG3LocalizationContent::contentCacheUpdated, [this]() {
+        m_organizer->refresh(false);
+        if (m_modListUiPatch)
+          m_modListUiPatch->refreshFromSelection();
+      });
 
   organizer->modList()->onModInstalled([this](MOBase::IModInterface* mod) {
     if (!mod || !m_localizationContent)
@@ -65,13 +66,14 @@ bool LWizardPlugin::init(MOBase::IOrganizer* organizer)
     if (nexusId > 0 && m_nexusApi) {
       // Resolve target language the same way as the rest of the plugin
       QVariant v = m_organizer->pluginSetting(name(), QStringLiteral("language"));
-      QString lang;
+      QString  lang;
       if (v.typeId() == QMetaType::QStringList) {
         const QStringList l = v.toStringList();
-        lang = l.isEmpty() ? QStringLiteral("Russian") : l.first();
+        lang                = l.isEmpty() ? QStringLiteral("Russian") : l.first();
       } else {
         lang = v.toString();
-        if (lang.isEmpty()) lang = QStringLiteral("Russian");
+        if (lang.isEmpty())
+          lang = QStringLiteral("Russian");
       }
       m_nexusApi->scanModAsync(modName, nexusId, lang);
     }
@@ -84,19 +86,20 @@ bool LWizardPlugin::init(MOBase::IOrganizer* organizer)
   // Drop cache entries for removed mods; disk cache survives restarts (invalidated by
   // per-mod fingerprint when files change).
   organizer->onNextRefresh(
-      [this]() { m_localizationContent->pruneMissingModsFromCache(); },
+      [this]() {
+        m_localizationContent->pruneMissingModsFromCache();
+      },
       /*immediateIfPossible=*/false);
 
   // Reload cache when language or single-language disk policy changes.
   organizer->onPluginSettingChanged(
-      [this](const QString& plugin, const QString& key, const QVariant&,
-             const QVariant& newValue) {
+      [this](const QString& plugin, const QString& key, const QVariant&, const QVariant& newValue) {
         if (plugin != name())
           return;
         if (key == QStringLiteral("language")) {
           {
-            const QVariant v = m_organizer->pluginSetting(
-                name(), QStringLiteral("cache_only_current_language"));
+            const QVariant v =
+                m_organizer->pluginSetting(name(), QStringLiteral("cache_only_current_language"));
             if (v.isValid() && v.toBool())
               m_localizationContent->prunePersistentCacheToCurrentLanguageOnly();
           }
@@ -137,17 +140,19 @@ void LWizardPlugin::registerLocalizationContentFeature()
 
   auto* features = m_organizer->gameFeatures();
   // registerFeature(IPluginGame*, …) matches the Python reference (managedGame()).
-  auto* game =
-      const_cast<MOBase::IPluginGame*>(m_organizer->managedGame());
-  bool ok = false;
+  auto* game = const_cast<MOBase::IPluginGame*>(m_organizer->managedGame());
+  bool  ok   = false;
   if (game != nullptr) {
-    ok = features->registerFeature(game, m_localizationContent,
-                                   /*priority=*/10, /*replace=*/true);
+    ok = features->registerFeature(game,
+                                   m_localizationContent,
+                                   /*priority=*/10,
+                                   /*replace=*/true);
   }
   if (!ok) {
-    ok = features->registerFeature(
-        QStringList{QStringLiteral("baldursgate3")}, m_localizationContent,
-        /*priority=*/10, /*replace=*/true);
+    ok = features->registerFeature(QStringList{QStringLiteral("baldursgate3")},
+                                   m_localizationContent,
+                                   /*priority=*/10,
+                                   /*replace=*/true);
   }
   m_contentFeatureRegistered = ok;
 }
@@ -204,25 +209,24 @@ MOBase::VersionInfo LWizardPlugin::version() const
 QList<MOBase::PluginSetting> LWizardPlugin::settings() const
 {
   return {
-      MOBase::PluginSetting(
-          QStringLiteral("language"),
-          tr("Localization language to scan for in BG3 mods"),
-          QStringList{
-              QStringLiteral("English"),
-              QStringLiteral("French"),
-              QStringLiteral("German"),
-              QStringLiteral("Italian"),
-              QStringLiteral("Spanish"),
-              QStringLiteral("Polish"),
-              QStringLiteral("Russian"),
-              QStringLiteral("ChineseSimplified"),
-              QStringLiteral("PortugueseBrazil"),
-              QStringLiteral("Turkish"),
-              QStringLiteral("Czech"),
-              QStringLiteral("Ukrainian"),
-              QStringLiteral("Korean"),
-              QStringLiteral("Japanese"),
-          }),
+      MOBase::PluginSetting(QStringLiteral("language"),
+                            tr("Localization language to scan for in BG3 mods"),
+                            QStringList{
+                                QStringLiteral("English"),
+                                QStringLiteral("French"),
+                                QStringLiteral("German"),
+                                QStringLiteral("Italian"),
+                                QStringLiteral("Spanish"),
+                                QStringLiteral("Polish"),
+                                QStringLiteral("Russian"),
+                                QStringLiteral("ChineseSimplified"),
+                                QStringLiteral("PortugueseBrazil"),
+                                QStringLiteral("Turkish"),
+                                QStringLiteral("Czech"),
+                                QStringLiteral("Ukrainian"),
+                                QStringLiteral("Korean"),
+                                QStringLiteral("Japanese"),
+                            }),
       MOBase::PluginSetting(
           QStringLiteral("cache_only_current_language"),
           tr("Persist scan cache only for the selected language (other languages are "

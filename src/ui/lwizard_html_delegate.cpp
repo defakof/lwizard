@@ -20,7 +20,7 @@ QString HtmlItemDelegate::toDisplayHtml(const QString& rawText)
   QString out;
   out.reserve(rawText.size() + 64);
 
-  int pos = 0;
+  int       pos = 0;
   const int len = rawText.length();
 
   while (pos < len) {
@@ -41,21 +41,20 @@ QString HtmlItemDelegate::toDisplayHtml(const QString& rawText)
       break;
     }
 
-    const QString tag     = rawText.mid(tagStart, tagEnd - tagStart + 1);
-    const QString tagLow  = tag.toLower();
+    const QString tag    = rawText.mid(tagStart, tagEnd - tagStart + 1);
+    const QString tagLow = tag.toLower();
 
     if (tagLow.startsWith(QStringLiteral("<lstag"))) {
       out += QStringLiteral("<span style=\"color:#7ab4d4\">");
     } else if (tagLow == QStringLiteral("</lstag>")) {
       out += QStringLiteral("</span>");
-    } else if (tagLow == QStringLiteral("<br>") ||
-               tagLow == QStringLiteral("<br/>") ||
+    } else if (tagLow == QStringLiteral("<br>") || tagLow == QStringLiteral("<br/>") ||
                tagLow == QStringLiteral("<br />")) {
       out += QStringLiteral("<br/>");
-    } else if (tagLow == QStringLiteral("<b>")  || tagLow == QStringLiteral("</b>") ||
-               tagLow == QStringLiteral("<i>")  || tagLow == QStringLiteral("</i>") ||
-               tagLow == QStringLiteral("<s>")  || tagLow == QStringLiteral("</s>") ||
-               tagLow == QStringLiteral("<u>")  || tagLow == QStringLiteral("</u>")) {
+    } else if (tagLow == QStringLiteral("<b>") || tagLow == QStringLiteral("</b>") ||
+               tagLow == QStringLiteral("<i>") || tagLow == QStringLiteral("</i>") ||
+               tagLow == QStringLiteral("<s>") || tagLow == QStringLiteral("</s>") ||
+               tagLow == QStringLiteral("<u>") || tagLow == QStringLiteral("</u>")) {
       out += tag;
     }
     // Unknown tags: silently drop
@@ -70,8 +69,9 @@ QString HtmlItemDelegate::toDisplayHtml(const QString& rawText)
 // paint
 // ---------------------------------------------------------------------------
 
-void HtmlItemDelegate::paint(QPainter* painter, const QStyleOptionViewItem& option,
-                             const QModelIndex& index) const
+void HtmlItemDelegate::paint(QPainter*                   painter,
+                             const QStyleOptionViewItem& option,
+                             const QModelIndex&          index) const
 {
   QStyleOptionViewItem opt = option;
   initStyleOption(&opt, index);
@@ -93,8 +93,8 @@ void HtmlItemDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opti
   if (rawText.isEmpty())
     return;
 
-  const bool selected = opt.state & QStyle::State_Selected;
-  const QRect inner   = opt.rect.adjusted(k_hPad, k_vPad, -k_hPad, -k_vPad);
+  const bool  selected = opt.state & QStyle::State_Selected;
+  const QRect inner    = opt.rect.adjusted(k_hPad, k_vPad, -k_hPad, -k_vPad);
 
   if (index.column() == 0) {
     // UUID — plain elided text
@@ -112,17 +112,13 @@ void HtmlItemDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opti
 
   // For selected rows inject white text override so content is readable on the
   // highlight background; the LSTag spans will also be overridden.
-  const QString bodyStyle = selected
-      ? QStringLiteral("color:white;")
-      : QString();
+  const QString bodyStyle = selected ? QStringLiteral("color:white;") : QString();
 
   QTextDocument doc;
   doc.setDefaultFont(opt.font);
-  doc.setHtml(
-      QStringLiteral("<html><body style='margin:0;padding:0;white-space:pre-wrap;%1'>")
-          .arg(bodyStyle) +
-      html +
-      QStringLiteral("</body></html>"));
+  doc.setHtml(QStringLiteral("<html><body style='margin:0;padding:0;white-space:pre-wrap;%1'>")
+                  .arg(bodyStyle) +
+              html + QStringLiteral("</body></html>"));
   doc.setTextWidth(inner.width());
 
   painter->save();
@@ -137,8 +133,7 @@ void HtmlItemDelegate::paint(QPainter* painter, const QStyleOptionViewItem& opti
 // sizeHint
 // ---------------------------------------------------------------------------
 
-QSize HtmlItemDelegate::sizeHint(const QStyleOptionViewItem& option,
-                                 const QModelIndex& index) const
+QSize HtmlItemDelegate::sizeHint(const QStyleOptionViewItem& option, const QModelIndex& index) const
 {
   const QSize base = QStyledItemDelegate::sizeHint(option, index);
 
@@ -157,9 +152,8 @@ QSize HtmlItemDelegate::sizeHint(const QStyleOptionViewItem& option,
   // Use a reasonable column width estimate for height calculation
   doc.setTextWidth(qMax(option.rect.width() - 2 * k_hPad, 200));
 
-  const int h = qBound(k_minRowHeight,
-                       static_cast<int>(doc.size().height()) + 2 * k_vPad,
-                       k_maxRowHeight);
+  const int h =
+      qBound(k_minRowHeight, static_cast<int>(doc.size().height()) + 2 * k_vPad, k_maxRowHeight);
   return QSize(base.width(), h);
 }
 
@@ -190,8 +184,9 @@ void HtmlItemDelegate::setEditorData(QWidget* editor, const QModelIndex& index) 
   pte->setPlainText(index.data(Qt::DisplayRole).toString());
 }
 
-void HtmlItemDelegate::setModelData(QWidget* editor, QAbstractItemModel* model,
-                                    const QModelIndex& index) const
+void HtmlItemDelegate::setModelData(QWidget*            editor,
+                                    QAbstractItemModel* model,
+                                    const QModelIndex&  index) const
 {
   auto* pte = qobject_cast<QPlainTextEdit*>(editor);
   if (!pte)
@@ -205,7 +200,7 @@ void HtmlItemDelegate::destroyEditor(QWidget* editor, const QModelIndex& index) 
   QStyledItemDelegate::destroyEditor(editor, index);
 }
 
-void HtmlItemDelegate::updateEditorGeometry(QWidget* editor,
+void HtmlItemDelegate::updateEditorGeometry(QWidget*                    editor,
                                             const QStyleOptionViewItem& option,
                                             const QModelIndex& /*index*/) const
 {

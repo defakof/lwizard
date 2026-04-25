@@ -25,7 +25,8 @@ QString existingExecutable(MOBase::IOrganizer* organizer)
     return QDir::toNativeSeparators(known);
 
   QDirIterator it(base + QStringLiteral("/plugins"),
-                  QStringList{QStringLiteral("Divine.exe")}, QDir::Files,
+                  QStringList{QStringLiteral("Divine.exe")},
+                  QDir::Files,
                   QDirIterator::Subdirectories);
   if (it.hasNext())
     return QDir::toNativeSeparators(it.next());
@@ -54,47 +55,45 @@ void ensureDownloadedIfMissing(MOBase::IOrganizer* organizer)
         "https://github.com/Norbyte/lslib/releases/download/v1.19.5/"
         "ExportTool-v1.19.5.zip";
 
-    const QString tempZip =
-        QDir::temp().filePath(QStringLiteral("ExportTool-v1.19.5.zip"));
+    const QString tempZip = QDir::temp().filePath(QStringLiteral("ExportTool-v1.19.5.zip"));
 
-    const int dlRet = QProcess::execute(
-        QStringLiteral("powershell"),
-        {QStringLiteral("-NoProfile"), QStringLiteral("-NonInteractive"),
-         QStringLiteral("-Command"),
-         QString::fromLatin1(
-             "[Net.ServicePointManager]::SecurityProtocol = "
-             "[Net.SecurityProtocolType]::Tls12; "
-             "Invoke-WebRequest -Uri '%1' -OutFile '%2'")
-             .arg(QString::fromLatin1(k_zipUrl), tempZip)});
+    const int dlRet =
+        QProcess::execute(QStringLiteral("powershell"),
+                          {QStringLiteral("-NoProfile"),
+                           QStringLiteral("-NonInteractive"),
+                           QStringLiteral("-Command"),
+                           QString::fromLatin1("[Net.ServicePointManager]::SecurityProtocol = "
+                                               "[Net.SecurityProtocolType]::Tls12; "
+                                               "Invoke-WebRequest -Uri '%1' -OutFile '%2'")
+                               .arg(QString::fromLatin1(k_zipUrl), tempZip)});
 
     if (dlRet != 0) {
-      LWizardLog::warn(
-          QStringLiteral("Failed to download LSLib (exit code %1)").arg(dlRet));
+      LWizardLog::warn(QStringLiteral("Failed to download LSLib (exit code %1)").arg(dlRet));
       return;
     }
 
     QDir().mkpath(targetDir);
 
-    const QString psExtract = QString::fromLatin1(
-        "Add-Type -Assembly 'System.IO.Compression.FileSystem';"
-        "$zip = [IO.Compression.ZipFile]::OpenRead('%1');"
-        "foreach ($e in $zip.Entries) {"
-        "  if ($e.FullName -like 'Tools/*' -and $e.Name -ne '') {"
-        "    $dest = '%2\\' + $e.Name;"
-        "    [IO.Compression.ZipFileExtensions]::ExtractToFile($e,$dest,$true)"
-        "  }"
-        "};"
-        "$zip.Dispose()")
-                                  .arg(tempZip, targetDir);
+    const QString psExtract =
+        QString::fromLatin1("Add-Type -Assembly 'System.IO.Compression.FileSystem';"
+                            "$zip = [IO.Compression.ZipFile]::OpenRead('%1');"
+                            "foreach ($e in $zip.Entries) {"
+                            "  if ($e.FullName -like 'Tools/*' -and $e.Name -ne '') {"
+                            "    $dest = '%2\\' + $e.Name;"
+                            "    [IO.Compression.ZipFileExtensions]::ExtractToFile($e,$dest,$true)"
+                            "  }"
+                            "};"
+                            "$zip.Dispose()")
+            .arg(tempZip, targetDir);
 
-    const int exRet = QProcess::execute(
-        QStringLiteral("powershell"),
-        {QStringLiteral("-NoProfile"), QStringLiteral("-NonInteractive"),
-         QStringLiteral("-Command"), psExtract});
+    const int exRet = QProcess::execute(QStringLiteral("powershell"),
+                                        {QStringLiteral("-NoProfile"),
+                                         QStringLiteral("-NonInteractive"),
+                                         QStringLiteral("-Command"),
+                                         psExtract});
 
     if (exRet != 0) {
-      LWizardLog::warn(
-          QStringLiteral("Failed to extract LSLib (exit code %1)").arg(exRet));
+      LWizardLog::warn(QStringLiteral("Failed to extract LSLib (exit code %1)").arg(exRet));
       return;
     }
 
@@ -105,4 +104,4 @@ void ensureDownloadedIfMissing(MOBase::IOrganizer* organizer)
   thread->start();
 }
 
-}  // namespace LWizardDivine
+} // namespace LWizardDivine

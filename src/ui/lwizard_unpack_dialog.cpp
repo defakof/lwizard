@@ -37,9 +37,9 @@ LWizardUnpackDialog::LWizardUnpackDialog(MOBase::IOrganizer* organizer, QWidget*
   root->setContentsMargins(8, 8, 8, 8);
   root->setSpacing(8);
 
-  root->addWidget(new QLabel(
-      tr("Choose a mod. Every .pak under that mod's folder will be extracted beside "
-         "the .pak (subfolder named from the package).")));
+  root->addWidget(
+      new QLabel(tr("Choose a mod. Every .pak under that mod's folder will be extracted beside "
+                    "the .pak (subfolder named from the package).")));
 
   m_combo = new QComboBox(this);
   refillMods();
@@ -60,11 +60,10 @@ LWizardUnpackDialog::LWizardUnpackDialog(MOBase::IOrganizer* organizer, QWidget*
     sb->setValue(sb->maximum());
   root->addWidget(m_log, 1);
 
-  connect(&LWizardLog::instance(), &LWizardLog::entryAdded, this,
-          &LWizardUnpackDialog::onLogEntry);
+  connect(&LWizardLog::instance(), &LWizardLog::entryAdded, this, &LWizardUnpackDialog::onLogEntry);
 
   auto* buttons = new QDialogButtonBox(Qt::Horizontal, this);
-  m_unpackBtn = buttons->addButton(tr("Unpack"), QDialogButtonBox::ActionRole);
+  m_unpackBtn   = buttons->addButton(tr("Unpack"), QDialogButtonBox::ActionRole);
   buttons->addButton(QDialogButtonBox::Close);
   connect(m_unpackBtn, &QPushButton::clicked, this, &LWizardUnpackDialog::onUnpack);
   connect(buttons, &QDialogButtonBox::rejected, this, &QDialog::reject);
@@ -77,7 +76,7 @@ void LWizardUnpackDialog::refillMods()
   if (!m_organizer)
     return;
 
-  QStringList names;
+  QStringList       names;
   const QStringList all = m_organizer->modList()->allMods();
   for (const QString& name : all) {
     if (m_organizer->modList()->state(name) & MOBase::IModList::STATE_VALID)
@@ -122,7 +121,8 @@ void LWizardUnpackDialog::onUnpack()
   if (divine.isEmpty()) {
     LWizardDivine::ensureDownloadedIfMissing(m_organizer);
     QMessageBox::information(
-        this, tr("Divine"),
+        this,
+        tr("Divine"),
         tr("Divine.exe was not found. A download may be in progress — check the LWizard "
            "log, wait for it to finish, then try again. You can also install Norbyte's "
            "LSLib / ExportTool manually."));
@@ -134,57 +134,55 @@ void LWizardUnpackDialog::onUnpack()
   // Set by the worker so the UI thread can open Explorer only when something ran.
   auto* hadPaks = new bool(false);
 
-  auto* thread = QThread::create(
-      [modPath, divine, hadPaks]() {
-        QStringList paks;
-        QDirIterator it(modPath, QStringList{QStringLiteral("*.pak")}, QDir::Files,
-                        QDirIterator::Subdirectories);
-        while (it.hasNext())
-          paks.append(QDir::toNativeSeparators(it.next()));
+  auto* thread = QThread::create([modPath, divine, hadPaks]() {
+    QStringList  paks;
+    QDirIterator it(
+        modPath, QStringList{QStringLiteral("*.pak")}, QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext())
+      paks.append(QDir::toNativeSeparators(it.next()));
 
-        if (paks.isEmpty()) {
-          LWizardLog::warn(
-              QStringLiteral("No .pak files found under the selected mod."));
-          return;
-        }
+    if (paks.isEmpty()) {
+      LWizardLog::warn(QStringLiteral("No .pak files found under the selected mod."));
+      return;
+    }
 
-        *hadPaks = true;
+    *hadPaks = true;
 
-        LWizardLog::info(
-            QStringLiteral("Unpack — %1 .pak file(s)").arg(paks.size()));
+    LWizardLog::info(QStringLiteral("Unpack — %1 .pak file(s)").arg(paks.size()));
 
-        for (const QString& pak : paks) {
-          const QFileInfo fi(pak);
-          const QString destDir = fi.absolutePath();
-          const int ret = QProcess::execute(
-              divine,
-              {QStringLiteral("-g"), QStringLiteral("bg3"), QStringLiteral("-a"),
-               QStringLiteral("extract-package"), QStringLiteral("-s"),
-               fi.absoluteFilePath(), QStringLiteral("-d"), destDir,
-               QStringLiteral("--use-package-name")});
-          if (ret != 0)
-            LWizardLog::warn(QStringLiteral("unpack exit %1: %2").arg(ret).arg(pak));
-          else
-            LWizardLog::info(QStringLiteral("unpacked: %1").arg(pak));
-        }
+    for (const QString& pak : paks) {
+      const QFileInfo fi(pak);
+      const QString   destDir = fi.absolutePath();
+      const int       ret     = QProcess::execute(divine,
+                                                  {QStringLiteral("-g"),
+                                                   QStringLiteral("bg3"),
+                                                   QStringLiteral("-a"),
+                                                   QStringLiteral("extract-package"),
+                                                   QStringLiteral("-s"),
+                                                   fi.absoluteFilePath(),
+                                                   QStringLiteral("-d"),
+                                                   destDir,
+                                                   QStringLiteral("--use-package-name")});
+      if (ret != 0)
+        LWizardLog::warn(QStringLiteral("unpack exit %1: %2").arg(ret).arg(pak));
+      else
+        LWizardLog::info(QStringLiteral("unpacked: %1").arg(pak));
+    }
 
-        LWizardLog::info(QStringLiteral("Unpack finished."));
-      });
+    LWizardLog::info(QStringLiteral("Unpack finished."));
+  });
 
   QPointer<LWizardUnpackDialog> self(this);
-  QObject::connect(thread, &QThread::finished, this,
-                   [self, thread, modPath, hadPaks]() {
-                     if (self && self->m_unpackBtn)
-                       self->m_unpackBtn->setEnabled(true);
-                     if (*hadPaks) {
-                       const QUrl url = QUrl::fromLocalFile(modPath);
-                       if (!QDesktopServices::openUrl(url))
-                         LWizardLog::warn(
-                             QStringLiteral("Could not open folder in Explorer: ") +
-                             modPath);
-                     }
-                     delete hadPaks;
-                     thread->deleteLater();
-                   });
+  QObject::connect(thread, &QThread::finished, this, [self, thread, modPath, hadPaks]() {
+    if (self && self->m_unpackBtn)
+      self->m_unpackBtn->setEnabled(true);
+    if (*hadPaks) {
+      const QUrl url = QUrl::fromLocalFile(modPath);
+      if (!QDesktopServices::openUrl(url))
+        LWizardLog::warn(QStringLiteral("Could not open folder in Explorer: ") + modPath);
+    }
+    delete hadPaks;
+    thread->deleteLater();
+  });
   thread->start();
 }

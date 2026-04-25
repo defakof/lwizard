@@ -45,47 +45,50 @@ class TranslationTab : public QWidget
   Q_OBJECT
 
 public:
-  explicit TranslationTab(MOBase::IOrganizer* organizer,
+  explicit TranslationTab(MOBase::IOrganizer*                     organizer,
                           std::shared_ptr<BG3LocalizationContent> content,
-                          QWidget* parent = nullptr);
+                          QWidget*                                parent = nullptr);
   ~TranslationTab() override;
 
 private:
   // ── dependencies ─────────────────────────────────────────────────────────
-  MOBase::IOrganizer*                    m_organizer;
+  MOBase::IOrganizer*                     m_organizer;
   std::shared_ptr<BG3LocalizationContent> m_content;
 
   // ── UI ───────────────────────────────────────────────────────────────────
-  QListWidget*  m_modList       = nullptr;
-  QLineEdit*    m_modSearch     = nullptr;
-  QComboBox*    m_srcLangCombo  = nullptr;
-  QComboBox*    m_dstLangCombo  = nullptr;
-  QPushButton*  m_loadBtn       = nullptr;
-  QLabel*       m_statusLabel   = nullptr;
-  QLineEdit*    m_strSearch     = nullptr;
-  QTableWidget* m_table         = nullptr;
-  QPushButton*  m_copyOrigBtn   = nullptr;
-  QPushButton*  m_exportPakBtn  = nullptr;
-  QPushButton*  m_exportModBtn  = nullptr;
+  QListWidget*  m_modList      = nullptr;
+  QLineEdit*    m_modSearch    = nullptr;
+  QComboBox*    m_srcLangCombo = nullptr;
+  QComboBox*    m_dstLangCombo = nullptr;
+  QPushButton*  m_loadBtn      = nullptr;
+  QLabel*       m_statusLabel  = nullptr;
+  QLineEdit*    m_strSearch    = nullptr;
+  QTableWidget* m_table        = nullptr;
+  QPushButton*  m_copyOrigBtn  = nullptr;
+  QPushButton*  m_exportPakBtn = nullptr;
+  QPushButton*  m_exportModBtn = nullptr;
 
   // AI section
-  QLineEdit*    m_apiKeyEdit    = nullptr;
-  QComboBox*    m_modelCombo    = nullptr;
-  QPushButton*  m_aiTransBtn       = nullptr;
-  QPushButton*  m_clipboardCopyBtn = nullptr;
+  QLineEdit*    m_apiKeyEdit         = nullptr;
+  QComboBox*    m_modelCombo         = nullptr;
+  QPushButton*  m_aiTransBtn         = nullptr;
+  QPushButton*  m_clipboardCopyBtn   = nullptr;
   QPushButton*  m_clipboardImportBtn = nullptr;
-  QProgressBar* m_aiProgress      = nullptr;
-  QLabel*       m_aiStatusLabel   = nullptr;
+  QProgressBar* m_aiProgress         = nullptr;
+  QLabel*       m_aiStatusLabel      = nullptr;
 
   // ── state ─────────────────────────────────────────────────────────────────
-  QString m_currentMod;
-  QMap<QString, QString> m_originalStrings;   // UUID → original text
-  QMap<QString, QString> m_translations;      // UUID → translated text
+  QString                m_currentMod;
+  QMap<QString, QString> m_originalStrings; // UUID → original text
+  QMap<QString, QString> m_translations;    // UUID → translated text
 
-  struct Row { QString uuid, original, translated; };
+  struct Row
+  {
+    QString uuid, original, translated;
+  };
   QVector<Row> m_allRows;
 
-  QThread*             m_loadThread = nullptr;
+  QThread*             m_loadThread   = nullptr;
   LWizardAiTranslator* m_aiTranslator = nullptr;
 
   // ── setup ─────────────────────────────────────────────────────────────────
@@ -125,11 +128,12 @@ private:
   void    loadTranslationsFromDisk();
   void    saveTranslationsToDisk() const;
 
-  QString modFolderName() const;          // "{currentMod} - {dstLang}"
-  QString translationXml() const;         // full XML string for the translated file
+  QString modFolderName() const;  // "{currentMod} - {dstLang}"
+  QString translationXml() const; // full XML string for the translated file
   QString metaLsx(const QString& folderName, const QString& uuid) const;
-  bool    buildModStructure(const QString& rootPath, const QString& modFolder,
-                            QString* outXmlName = nullptr) const;
+  bool    buildModStructure(const QString& rootPath,
+                            const QString& modFolder,
+                            QString*       outXmlName = nullptr) const;
   bool    packWithDivine(const QString& sourcePath, const QString& outputPak) const;
   QString storedOrNewUuid() const;
   void    storeUuid(const QString& uuid) const;

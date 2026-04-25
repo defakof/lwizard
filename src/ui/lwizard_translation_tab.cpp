@@ -41,34 +41,37 @@
 #include <uibase/imoinfo.h>
 
 static const QStringList k_languages = {
-    QStringLiteral("English"),          QStringLiteral("French"),
-    QStringLiteral("German"),           QStringLiteral("Italian"),
-    QStringLiteral("Spanish"),          QStringLiteral("Polish"),
-    QStringLiteral("Russian"),          QStringLiteral("ChineseSimplified"),
-    QStringLiteral("PortugueseBrazil"), QStringLiteral("Turkish"),
-    QStringLiteral("Czech"),            QStringLiteral("Ukrainian"),
-    QStringLiteral("Korean"),           QStringLiteral("Japanese"),
+    QStringLiteral("English"),
+    QStringLiteral("French"),
+    QStringLiteral("German"),
+    QStringLiteral("Italian"),
+    QStringLiteral("Spanish"),
+    QStringLiteral("Polish"),
+    QStringLiteral("Russian"),
+    QStringLiteral("ChineseSimplified"),
+    QStringLiteral("PortugueseBrazil"),
+    QStringLiteral("Turkish"),
+    QStringLiteral("Czech"),
+    QStringLiteral("Ukrainian"),
+    QStringLiteral("Korean"),
+    QStringLiteral("Japanese"),
 };
 
 // ---------------------------------------------------------------------------
 // Construction
 // ---------------------------------------------------------------------------
 
-TranslationTab::TranslationTab(MOBase::IOrganizer* organizer,
+TranslationTab::TranslationTab(MOBase::IOrganizer*                     organizer,
                                std::shared_ptr<BG3LocalizationContent> content,
-                               QWidget* parent)
+                               QWidget*                                parent)
     : QWidget(parent), m_organizer(organizer), m_content(std::move(content))
 {
   m_aiTranslator = new LWizardAiTranslator(this);
-  m_aiTranslator->setApiKey(loadApiKey());   // load persisted key immediately
-  connect(m_aiTranslator, &LWizardAiTranslator::batchDone,
-          this, &TranslationTab::onAiBatchDone);
-  connect(m_aiTranslator, &LWizardAiTranslator::progress,
-          this, &TranslationTab::onAiProgress);
-  connect(m_aiTranslator, &LWizardAiTranslator::finished,
-          this, &TranslationTab::onAiFinished);
-  connect(m_aiTranslator, &LWizardAiTranslator::error,
-          this, &TranslationTab::onAiError);
+  m_aiTranslator->setApiKey(loadApiKey()); // load persisted key immediately
+  connect(m_aiTranslator, &LWizardAiTranslator::batchDone, this, &TranslationTab::onAiBatchDone);
+  connect(m_aiTranslator, &LWizardAiTranslator::progress, this, &TranslationTab::onAiProgress);
+  connect(m_aiTranslator, &LWizardAiTranslator::finished, this, &TranslationTab::onAiFinished);
+  connect(m_aiTranslator, &LWizardAiTranslator::error, this, &TranslationTab::onAiError);
 
   setupUi();
   populateModList();
@@ -141,12 +144,11 @@ void TranslationTab::setupUi()
   m_dstLangCombo->addItems(k_languages);
   // Default to the plugin "scan for" language
   {
-    QVariant v = m_organizer->pluginSetting(QStringLiteral("lwizard"),
-                                            QStringLiteral("language"));
-    QString saved;
+    QVariant v = m_organizer->pluginSetting(QStringLiteral("lwizard"), QStringLiteral("language"));
+    QString  saved;
     if (v.typeId() == QMetaType::QStringList) {
       const QStringList l = v.toStringList();
-      saved = l.isEmpty() ? QStringLiteral("Russian") : l.first();
+      saved               = l.isEmpty() ? QStringLiteral("Russian") : l.first();
     } else {
       saved = v.toString();
     }
@@ -183,9 +185,8 @@ void TranslationTab::setupUi()
   ctrlRow->addWidget(m_strSearch, 1);
 
   m_copyOrigBtn = new QPushButton(tr("Original = Translated"), this);
-  m_copyOrigBtn->setToolTip(
-      tr("Pre-fill empty translation cells with the original text.\n"
-         "Useful as a starting point when editing existing markup."));
+  m_copyOrigBtn->setToolTip(tr("Pre-fill empty translation cells with the original text.\n"
+                               "Useful as a starting point when editing existing markup."));
   m_copyOrigBtn->setEnabled(false);
   ctrlRow->addWidget(m_copyOrigBtn);
 
@@ -201,8 +202,7 @@ void TranslationTab::setupUi()
   m_table->verticalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
   m_table->setWordWrap(true);
   m_table->setSelectionBehavior(QAbstractItemView::SelectRows);
-  m_table->setEditTriggers(QAbstractItemView::DoubleClicked |
-                           QAbstractItemView::SelectedClicked |
+  m_table->setEditTriggers(QAbstractItemView::DoubleClicked | QAbstractItemView::SelectedClicked |
                            QAbstractItemView::EditKeyPressed);
   m_table->setAlternatingRowColors(true);
 
@@ -240,11 +240,10 @@ void TranslationTab::setupUi()
 
   // Action row
   auto* aiActionRow = new QHBoxLayout;
-  m_aiTransBtn = new QPushButton(tr("Translate Selected Rows"), aiGroup);
-  m_aiTransBtn->setToolTip(
-      tr("Translate the selected table rows using Gemini.\n"
-         "Select rows first, then click. All existing translations\n"
-         "are sent as context to ensure consistent terminology."));
+  m_aiTransBtn      = new QPushButton(tr("Translate Selected Rows"), aiGroup);
+  m_aiTransBtn->setToolTip(tr("Translate the selected table rows using Gemini.\n"
+                              "Select rows first, then click. All existing translations\n"
+                              "are sent as context to ensure consistent terminology."));
   m_aiTransBtn->setEnabled(false);
   aiActionRow->addWidget(m_aiTransBtn);
 
@@ -288,25 +287,21 @@ void TranslationTab::setupUi()
   exportRow->addWidget(m_exportPakBtn);
 
   m_exportModBtn = new QPushButton(tr("Export as Mod"), this);
-  m_exportModBtn->setToolTip(
-      tr("Create a mod in Mod Organizer with the packed translation."));
+  m_exportModBtn->setToolTip(tr("Create a mod in Mod Organizer with the packed translation."));
   m_exportModBtn->setEnabled(false);
   exportRow->addWidget(m_exportModBtn);
 
   root->addLayout(exportRow);
 
   // ── Connections ───────────────────────────────────────────────────────────
-  connect(m_modSearch, &QLineEdit::textChanged, this,
-          &TranslationTab::onModSearchChanged);
-  connect(m_modList, &QListWidget::currentItemChanged, this,
-          [this](QListWidgetItem*) { onModSelected(); });
+  connect(m_modSearch, &QLineEdit::textChanged, this, &TranslationTab::onModSearchChanged);
+  connect(m_modList, &QListWidget::currentItemChanged, this, [this](QListWidgetItem*) {
+    onModSelected();
+  });
   connect(m_loadBtn, &QPushButton::clicked, this, &TranslationTab::onLoadClicked);
-  connect(m_strSearch, &QLineEdit::textChanged, this,
-          &TranslationTab::onStringSearchChanged);
-  connect(m_copyOrigBtn, &QPushButton::clicked, this,
-          &TranslationTab::onCopyOriginalClicked);
-  connect(m_table, &QTableWidget::cellChanged, this,
-          &TranslationTab::onTableCellChanged);
+  connect(m_strSearch, &QLineEdit::textChanged, this, &TranslationTab::onStringSearchChanged);
+  connect(m_copyOrigBtn, &QPushButton::clicked, this, &TranslationTab::onCopyOriginalClicked);
+  connect(m_table, &QTableWidget::cellChanged, this, &TranslationTab::onTableCellChanged);
   connect(m_exportPakBtn, &QPushButton::clicked, this, &TranslationTab::onExportPak);
   connect(m_exportModBtn, &QPushButton::clicked, this, &TranslationTab::onExportAsMod);
 
@@ -314,20 +309,18 @@ void TranslationTab::setupUi()
     const QString key = m_apiKeyEdit->text().trimmed();
     saveApiKey(key);
     m_aiTranslator->setApiKey(key);
-    m_aiStatusLabel->setText(key.isEmpty() ? tr("API key cleared.")
-                                           : tr("API key saved."));
+    m_aiStatusLabel->setText(key.isEmpty() ? tr("API key cleared.") : tr("API key saved."));
     // Re-evaluate button states regardless of whether strings were loaded first
     m_aiTransBtn->setEnabled(!m_originalStrings.isEmpty() && m_aiTranslator->hasApiKey());
     m_clipboardCopyBtn->setEnabled(!m_originalStrings.isEmpty());
     m_clipboardImportBtn->setEnabled(!m_originalStrings.isEmpty());
   });
   connect(m_apiKeyEdit, &QLineEdit::returnPressed, saveKeyBtn, &QPushButton::click);
-  connect(m_aiTransBtn, &QPushButton::clicked, this,
-          &TranslationTab::onAiTranslateClicked);
-  connect(m_clipboardCopyBtn, &QPushButton::clicked, this,
-          &TranslationTab::onCopyPromptToClipboard);
-  connect(m_clipboardImportBtn, &QPushButton::clicked, this,
-          &TranslationTab::onImportFromClipboard);
+  connect(m_aiTransBtn, &QPushButton::clicked, this, &TranslationTab::onAiTranslateClicked);
+  connect(
+      m_clipboardCopyBtn, &QPushButton::clicked, this, &TranslationTab::onCopyPromptToClipboard);
+  connect(
+      m_clipboardImportBtn, &QPushButton::clicked, this, &TranslationTab::onImportFromClipboard);
 
   // Model selection — update translator immediately
   connect(m_modelCombo, &QComboBox::currentIndexChanged, this, [this](int idx) {
@@ -338,19 +331,17 @@ void TranslationTab::setupUi()
   m_aiTranslator->setModel(m_modelCombo->itemData(0).toString());
 
   // Rate-limit countdown in status label
-  connect(m_aiTranslator, &LWizardAiTranslator::rateLimited, this,
-          [this](int secs) {
-            m_aiStatusLabel->setText(
-                tr("Rate limited — retrying in %1 s…").arg(secs));
-          });
+  connect(m_aiTranslator, &LWizardAiTranslator::rateLimited, this, [this](int secs) {
+    m_aiStatusLabel->setText(tr("Rate limited — retrying in %1 s…").arg(secs));
+  });
 }
 
 void TranslationTab::populateModList()
 {
   m_modList->clear();
 
-  auto* modList = m_organizer->modList();
-  const QStringList names = modList->allModsByProfilePriority();
+  auto*             modList = m_organizer->modList();
+  const QStringList names   = modList->allModsByProfilePriority();
   for (const QString& name : names) {
     if (name.isEmpty())
       continue;
@@ -384,18 +375,15 @@ QString TranslationTab::translationsFilePath() const
 {
   if (m_currentMod.isEmpty())
     return {};
-  const QString dir = m_organizer->basePath() +
-                      QStringLiteral("/plugins/lwizard/translations");
+  const QString dir = m_organizer->basePath() + QStringLiteral("/plugins/lwizard/translations");
   // Sanitize mod name for use in a file name
   QString safe = m_currentMod;
   for (QChar& c : safe) {
-    if (c == QChar('/') || c == QChar('\\') || c == QChar(':') ||
-        c == QChar('*')  || c == QChar('?')  || c == QChar('"') ||
-        c == QChar('<')  || c == QChar('>')  || c == QChar('|'))
+    if (c == QChar('/') || c == QChar('\\') || c == QChar(':') || c == QChar('*') ||
+        c == QChar('?') || c == QChar('"') || c == QChar('<') || c == QChar('>') || c == QChar('|'))
       c = QChar('_');
   }
-  return dir + QChar('/') + safe + QChar('_') + currentDstLang() +
-         QStringLiteral(".json");
+  return dir + QChar('/') + safe + QChar('_') + currentDstLang() + QStringLiteral(".json");
 }
 
 void TranslationTab::loadTranslationsFromDisk()
@@ -409,7 +397,7 @@ void TranslationTab::loadTranslationsFromDisk()
   if (!f.open(QIODevice::ReadOnly))
     return;
 
-  QJsonParseError err;
+  QJsonParseError     err;
   const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
   if (err.error != QJsonParseError::NoError || !doc.isObject())
     return;
@@ -442,12 +430,11 @@ void TranslationTab::saveTranslationsToDisk() const
   // Preserve UUID if already stored
   QFile fr(path);
   if (fr.open(QIODevice::ReadOnly)) {
-    QJsonParseError err;
+    QJsonParseError     err;
     const QJsonDocument existing = QJsonDocument::fromJson(fr.readAll(), &err);
     fr.close();
     if (err.error == QJsonParseError::NoError && existing.isObject()) {
-      const QString storedUuid =
-          existing.object()[QStringLiteral("uuid")].toString();
+      const QString storedUuid = existing.object()[QStringLiteral("uuid")].toString();
       if (!storedUuid.isEmpty())
         root[QStringLiteral("uuid")] = storedUuid;
     }
@@ -464,7 +451,7 @@ QString TranslationTab::storedOrNewUuid() const
   if (!path.isEmpty()) {
     QFile f(path);
     if (f.open(QIODevice::ReadOnly)) {
-      QJsonParseError err;
+      QJsonParseError     err;
       const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
       if (err.error == QJsonParseError::NoError && doc.isObject()) {
         const QString stored = doc.object()[QStringLiteral("uuid")].toString();
@@ -485,9 +472,9 @@ void TranslationTab::storeUuid(const QString& uuid) const
   QDir().mkpath(QFileInfo(path).absolutePath());
 
   QJsonObject root;
-  QFile fr(path);
+  QFile       fr(path);
   if (fr.open(QIODevice::ReadOnly)) {
-    QJsonParseError err;
+    QJsonParseError     err;
     const QJsonDocument existing = QJsonDocument::fromJson(fr.readAll(), &err);
     fr.close();
     if (err.error == QJsonParseError::NoError && existing.isObject())
@@ -522,12 +509,12 @@ void TranslationTab::setExportEnabled(bool enabled)
 
 void TranslationTab::setAiBusy(bool busy)
 {
-  m_aiTransBtn->setEnabled(!busy && !m_originalStrings.isEmpty() &&
-                           m_aiTranslator->hasApiKey());
+  m_aiTransBtn->setEnabled(!busy && !m_originalStrings.isEmpty() && m_aiTranslator->hasApiKey());
   m_clipboardCopyBtn->setEnabled(!busy && !m_originalStrings.isEmpty());
   m_clipboardImportBtn->setEnabled(!busy && !m_originalStrings.isEmpty());
   m_aiProgress->setVisible(busy);
-  if (!busy) m_aiProgress->setValue(0);
+  if (!busy)
+    m_aiProgress->setValue(0);
 }
 
 // ---------------------------------------------------------------------------
@@ -554,8 +541,7 @@ void TranslationTab::fillTable(const QVector<Row>& rows)
   m_table->setRowCount(rows.size());
 
   // Update header label for translation column
-  QStringList headers = {tr("UUID"), tr("Original"),
-                         tr("%1 Translation").arg(currentDstLang())};
+  QStringList headers = {tr("UUID"), tr("Original"), tr("%1 Translation").arg(currentDstLang())};
   m_table->setHorizontalHeaderLabels(headers);
 
   for (int r = 0; r < rows.size(); ++r) {
@@ -581,9 +567,8 @@ void TranslationTab::fillTable(const QVector<Row>& rows)
 void TranslationTab::onModSearchChanged(const QString& filter)
 {
   for (int i = 0; i < m_modList->count(); ++i) {
-    auto* item   = m_modList->item(i);
-    const bool v = filter.isEmpty() ||
-                   item->text().contains(filter, Qt::CaseInsensitive);
+    auto*      item = m_modList->item(i);
+    const bool v    = filter.isEmpty() || item->text().contains(filter, Qt::CaseInsensitive);
     item->setHidden(!v);
   }
 }
@@ -609,8 +594,8 @@ void TranslationTab::onLoadClicked()
   if (!item)
     return;
 
-  const QString modName  = item->text();
-  const QString srcLang  = currentSrcLang();
+  const QString modName = item->text();
+  const QString srcLang = currentSrcLang();
 
   if (m_loadThread && m_loadThread->isRunning())
     return;
@@ -628,11 +613,10 @@ void TranslationTab::onLoadClicked()
   // it never touches a dangling pointer.  qApp is used as the invokeMethod
   // context (it outlives everything); the QPointer check inside the lambda
   // runs on the main thread where it is safe to dereference.
-  QPointer<TranslationTab> weakSelf = this;
-  auto contentRef = m_content;
-  m_loadThread    = QThread::create([weakSelf, modName, srcLang, contentRef]() {
-    const QMap<QString, QString> strings =
-        contentRef->loadStringsSync(modName, srcLang);
+  QPointer<TranslationTab> weakSelf   = this;
+  auto                     contentRef = m_content;
+  m_loadThread                        = QThread::create([weakSelf, modName, srcLang, contentRef]() {
+    const QMap<QString, QString> strings = contentRef->loadStringsSync(modName, srcLang);
     if (strings.isEmpty())
       QMetaObject::invokeMethod(
           qApp,
@@ -751,7 +735,7 @@ void TranslationTab::onCopyOriginalClicked()
 
 QString TranslationTab::translationXml() const
 {
-  QString xml;
+  QString          xml;
   QXmlStreamWriter xw(&xml);
   xw.setAutoFormatting(true);
   xw.writeStartDocument(QStringLiteral("1.0"));
@@ -766,7 +750,7 @@ QString TranslationTab::translationXml() const
       continue;
     xw.writeStartElement(QStringLiteral("content"));
     xw.writeAttribute(QStringLiteral("contentuid"), it.key());
-    xw.writeAttribute(QStringLiteral("version"),    QStringLiteral("1"));
+    xw.writeAttribute(QStringLiteral("version"), QStringLiteral("1"));
     xw.writeCharacters(it.value());
     xw.writeEndElement();
   }
@@ -778,18 +762,18 @@ QString TranslationTab::translationXml() const
 
 QString TranslationTab::metaLsx(const QString& folderName, const QString& uuid) const
 {
-  QString out;
+  QString          out;
   QXmlStreamWriter xw(&out);
   xw.setAutoFormatting(true);
   xw.setAutoFormattingIndent(3);
-  xw.writeStartDocument(QStringLiteral("1.0"),  true);
+  xw.writeStartDocument(QStringLiteral("1.0"), true);
 
   xw.writeStartElement(QStringLiteral("save"));
   xw.writeStartElement(QStringLiteral("version"));
-  xw.writeAttribute(QStringLiteral("major"),    QStringLiteral("4"));
-  xw.writeAttribute(QStringLiteral("minor"),    QStringLiteral("0"));
+  xw.writeAttribute(QStringLiteral("major"), QStringLiteral("4"));
+  xw.writeAttribute(QStringLiteral("minor"), QStringLiteral("0"));
   xw.writeAttribute(QStringLiteral("revision"), QStringLiteral("9"));
-  xw.writeAttribute(QStringLiteral("build"),    QStringLiteral("331"));
+  xw.writeAttribute(QStringLiteral("build"), QStringLiteral("331"));
   xw.writeEndElement(); // version
 
   xw.writeStartElement(QStringLiteral("region"));
@@ -810,38 +794,40 @@ QString TranslationTab::metaLsx(const QString& folderName, const QString& uuid) 
 
   auto attr = [&](const QString& id, const QString& type, const QString& value) {
     xw.writeStartElement(QStringLiteral("attribute"));
-    xw.writeAttribute(QStringLiteral("id"),    id);
-    xw.writeAttribute(QStringLiteral("type"),  type);
+    xw.writeAttribute(QStringLiteral("id"), id);
+    xw.writeAttribute(QStringLiteral("type"), type);
     xw.writeAttribute(QStringLiteral("value"), value);
     xw.writeEndElement();
   };
 
-  attr(QStringLiteral("Author"),                    QStringLiteral("LSString"),    QStringLiteral(""));
-  attr(QStringLiteral("CharacterCreationLevelName"), QStringLiteral("FixedString"), QStringLiteral(""));
-  attr(QStringLiteral("Description"),               QStringLiteral("LSString"),
+  attr(QStringLiteral("Author"), QStringLiteral("LSString"), QStringLiteral(""));
+  attr(QStringLiteral("CharacterCreationLevelName"),
+       QStringLiteral("FixedString"),
+       QStringLiteral(""));
+  attr(QStringLiteral("Description"),
+       QStringLiteral("LSString"),
        QStringLiteral("Translation mod created by lwizard"));
-  attr(QStringLiteral("Folder"),                    QStringLiteral("LSString"),    folderName);
-  attr(QStringLiteral("LobbyLevelName"),             QStringLiteral("FixedString"), QStringLiteral(""));
-  attr(QStringLiteral("MD5"),                       QStringLiteral("LSString"),    QStringLiteral(""));
-  attr(QStringLiteral("MainMenuBackgroundVideo"),    QStringLiteral("FixedString"), QStringLiteral(""));
-  attr(QStringLiteral("MenuLevelName"),              QStringLiteral("FixedString"), QStringLiteral(""));
-  attr(QStringLiteral("Name"),                      QStringLiteral("LSString"),    folderName);
-  attr(QStringLiteral("NumPlayers"),                QStringLiteral("uint8"),       QStringLiteral("4"));
-  attr(QStringLiteral("PhotoBooth"),                QStringLiteral("FixedString"), QStringLiteral(""));
-  attr(QStringLiteral("StartupLevelName"),           QStringLiteral("FixedString"), QStringLiteral(""));
-  attr(QStringLiteral("Tags"),                      QStringLiteral("LSString"),    QStringLiteral(""));
-  attr(QStringLiteral("Type"),                      QStringLiteral("FixedString"), QStringLiteral("Add-on"));
-  attr(QStringLiteral("UUID"),                      QStringLiteral("FixedString"), uuid);
-  attr(QStringLiteral("Version64"),                 QStringLiteral("int64"),
-       QStringLiteral("36028797018963968"));
+  attr(QStringLiteral("Folder"), QStringLiteral("LSString"), folderName);
+  attr(QStringLiteral("LobbyLevelName"), QStringLiteral("FixedString"), QStringLiteral(""));
+  attr(QStringLiteral("MD5"), QStringLiteral("LSString"), QStringLiteral(""));
+  attr(
+      QStringLiteral("MainMenuBackgroundVideo"), QStringLiteral("FixedString"), QStringLiteral(""));
+  attr(QStringLiteral("MenuLevelName"), QStringLiteral("FixedString"), QStringLiteral(""));
+  attr(QStringLiteral("Name"), QStringLiteral("LSString"), folderName);
+  attr(QStringLiteral("NumPlayers"), QStringLiteral("uint8"), QStringLiteral("4"));
+  attr(QStringLiteral("PhotoBooth"), QStringLiteral("FixedString"), QStringLiteral(""));
+  attr(QStringLiteral("StartupLevelName"), QStringLiteral("FixedString"), QStringLiteral(""));
+  attr(QStringLiteral("Tags"), QStringLiteral("LSString"), QStringLiteral(""));
+  attr(QStringLiteral("Type"), QStringLiteral("FixedString"), QStringLiteral("Add-on"));
+  attr(QStringLiteral("UUID"), QStringLiteral("FixedString"), uuid);
+  attr(QStringLiteral("Version64"), QStringLiteral("int64"), QStringLiteral("36028797018963968"));
 
   // children of ModuleInfo
   xw.writeStartElement(QStringLiteral("children"));
 
   xw.writeStartElement(QStringLiteral("node"));
   xw.writeAttribute(QStringLiteral("id"), QStringLiteral("PublishVersion"));
-  attr(QStringLiteral("Version64"), QStringLiteral("int64"),
-       QStringLiteral("36028797018963968"));
+  attr(QStringLiteral("Version64"), QStringLiteral("int64"), QStringLiteral("36028797018963968"));
   xw.writeEndElement();
 
   xw.writeStartElement(QStringLiteral("node"));
@@ -866,14 +852,13 @@ QString TranslationTab::metaLsx(const QString& folderName, const QString& uuid) 
 
 bool TranslationTab::buildModStructure(const QString& rootPath,
                                        const QString& folderName,
-                                       QString* outXmlName) const
+                                       QString*       outXmlName) const
 {
   // sanitize modName for use as XML filename (no path separators)
   QString xmlName = m_currentMod;
   for (QChar& c : xmlName) {
-    if (c == QChar('/') || c == QChar('\\') || c == QChar(':') ||
-        c == QChar('*')  || c == QChar('?')  || c == QChar('"') ||
-        c == QChar('<')  || c == QChar('>')  || c == QChar('|'))
+    if (c == QChar('/') || c == QChar('\\') || c == QChar(':') || c == QChar('*') ||
+        c == QChar('?') || c == QChar('"') || c == QChar('<') || c == QChar('>') || c == QChar('|'))
       c = QChar('_');
   }
 
@@ -908,8 +893,7 @@ bool TranslationTab::buildModStructure(const QString& rootPath,
   return true;
 }
 
-bool TranslationTab::packWithDivine(const QString& sourcePath,
-                                    const QString& outputPak) const
+bool TranslationTab::packWithDivine(const QString& sourcePath, const QString& outputPak) const
 {
   const QString divine = LWizardDivine::existingExecutable(m_organizer);
   if (divine.isEmpty()) {
@@ -919,10 +903,14 @@ bool TranslationTab::packWithDivine(const QString& sourcePath,
 
   QProcess proc;
   proc.start(divine,
-             {QStringLiteral("-g"), QStringLiteral("bg3"),
-              QStringLiteral("-a"), QStringLiteral("create-package"),
-              QStringLiteral("-s"), sourcePath,
-              QStringLiteral("-d"), outputPak});
+             {QStringLiteral("-g"),
+              QStringLiteral("bg3"),
+              QStringLiteral("-a"),
+              QStringLiteral("create-package"),
+              QStringLiteral("-s"),
+              sourcePath,
+              QStringLiteral("-d"),
+              outputPak});
 
   if (!proc.waitForStarted(5000) || !proc.waitForFinished(120000)) {
     proc.kill();
@@ -930,10 +918,9 @@ bool TranslationTab::packWithDivine(const QString& sourcePath,
     return false;
   }
   if (proc.exitCode() != 0) {
-    LWizardLog::warn(
-        QStringLiteral("Translation export: Divine.exe exit %1\n%2")
-            .arg(proc.exitCode())
-            .arg(QString::fromLocal8Bit(proc.readAllStandardError())));
+    LWizardLog::warn(QStringLiteral("Translation export: Divine.exe exit %1\n%2")
+                         .arg(proc.exitCode())
+                         .arg(QString::fromLocal8Bit(proc.readAllStandardError())));
     return false;
   }
   return true;
@@ -946,15 +933,13 @@ bool TranslationTab::packWithDivine(const QString& sourcePath,
 void TranslationTab::onExportPak()
 {
   if (m_currentMod.isEmpty() || m_translations.isEmpty()) {
-    QMessageBox::warning(this, tr("Export"),
-                         tr("No translations to export."));
+    QMessageBox::warning(this, tr("Export"), tr("No translations to export."));
     return;
   }
 
   const QString defaultName = modFolderName() + QStringLiteral(".pak");
-  const QString dest = QFileDialog::getSaveFileName(
-      this, tr("Save .pak"), QDir::homePath() + QChar('/') + defaultName,
-      tr("BG3 Pack (*.pak)"));
+  const QString dest        = QFileDialog::getSaveFileName(
+      this, tr("Save .pak"), QDir::homePath() + QChar('/') + defaultName, tr("BG3 Pack (*.pak)"));
   if (dest.isEmpty())
     return;
 
@@ -971,44 +956,44 @@ void TranslationTab::onExportPak()
   }
 
   if (!packWithDivine(tmp.path(), dest)) {
-    QMessageBox::critical(this, tr("Export"),
+    QMessageBox::critical(this,
+                          tr("Export"),
                           tr("Divine.exe failed to pack the mod.\n"
                              "Check the Logs tab for details."));
     return;
   }
 
-  QMessageBox::information(this, tr("Export"),
-                           tr("Exported successfully:\n%1").arg(dest));
+  QMessageBox::information(this, tr("Export"), tr("Exported successfully:\n%1").arg(dest));
   LWizardLog::info(QStringLiteral("Translation export: .pak saved to %1").arg(dest));
 }
 
 void TranslationTab::onExportAsMod()
 {
   if (m_currentMod.isEmpty() || m_translations.isEmpty()) {
-    QMessageBox::warning(this, tr("Export"),
-                         tr("No translations to export."));
+    QMessageBox::warning(this, tr("Export"), tr("No translations to export."));
     return;
   }
 
-  const QString folder    = modFolderName();
-  const QString modsPath  = m_organizer->modsPath();
-  const QString modDir    = modsPath + QChar('/') + folder;
-  const QString pakDir    = modDir + QStringLiteral("/PAK_FILES");
-  const QString pakPath   = pakDir + QChar('/') + folder + QStringLiteral(".pak");
+  const QString folder   = modFolderName();
+  const QString modsPath = m_organizer->modsPath();
+  const QString modDir   = modsPath + QChar('/') + folder;
+  const QString pakDir   = modDir + QStringLiteral("/PAK_FILES");
+  const QString pakPath  = pakDir + QChar('/') + folder + QStringLiteral(".pak");
 
   // Confirm if already exists
   if (QDir(modDir).exists()) {
-    const auto btn = QMessageBox::question(
-        this, tr("Export as Mod"),
-        tr("Mod '%1' already exists.\nOverwrite it?").arg(folder),
-        QMessageBox::Yes | QMessageBox::No);
+    const auto btn =
+        QMessageBox::question(this,
+                              tr("Export as Mod"),
+                              tr("Mod '%1' already exists.\nOverwrite it?").arg(folder),
+                              QMessageBox::Yes | QMessageBox::No);
     if (btn != QMessageBox::Yes)
       return;
   }
 
   if (!QDir().mkpath(pakDir)) {
-    QMessageBox::critical(this, tr("Export"),
-                          tr("Failed to create mod directory:\n%1").arg(pakDir));
+    QMessageBox::critical(
+        this, tr("Export"), tr("Failed to create mod directory:\n%1").arg(pakDir));
     return;
   }
 
@@ -1024,7 +1009,8 @@ void TranslationTab::onExportAsMod()
   }
 
   if (!packWithDivine(tmp.path(), pakPath)) {
-    QMessageBox::critical(this, tr("Export"),
+    QMessageBox::critical(this,
+                          tr("Export"),
                           tr("Divine.exe failed to pack the mod.\n"
                              "Check the Logs tab for details."));
     return;
@@ -1033,11 +1019,10 @@ void TranslationTab::onExportAsMod()
   // Trigger MO2 to pick up the new mod
   m_organizer->refresh(false);
 
-  QMessageBox::information(
-      this, tr("Export as Mod"),
-      tr("Mod created:\n%1\n\nThe mod list has been refreshed.").arg(modDir));
-  LWizardLog::info(
-      QStringLiteral("Translation export: mod created at %1").arg(modDir));
+  QMessageBox::information(this,
+                           tr("Export as Mod"),
+                           tr("Mod created:\n%1\n\nThe mod list has been refreshed.").arg(modDir));
+  LWizardLog::info(QStringLiteral("Translation export: mod created at %1").arg(modDir));
 }
 
 // ---------------------------------------------------------------------------
@@ -1046,8 +1031,7 @@ void TranslationTab::onExportAsMod()
 
 QString TranslationTab::aiConfigPath() const
 {
-  return m_organizer->basePath() +
-         QStringLiteral("/plugins/lwizard/ai_config.json");
+  return m_organizer->basePath() + QStringLiteral("/plugins/lwizard/ai_config.json");
 }
 
 QString TranslationTab::loadApiKey() const
@@ -1055,7 +1039,7 @@ QString TranslationTab::loadApiKey() const
   QFile f(aiConfigPath());
   if (!f.open(QIODevice::ReadOnly))
     return {};
-  QJsonParseError err;
+  QJsonParseError     err;
   const QJsonDocument doc = QJsonDocument::fromJson(f.readAll(), &err);
   if (err.error != QJsonParseError::NoError || !doc.isObject())
     return {};
@@ -1087,7 +1071,7 @@ void TranslationTab::onAiTranslateClicked()
 
   // Collect selected rows
   const QList<QTableWidgetItem*> sel = m_table->selectedItems();
-  QSet<int> rows;
+  QSet<int>                      rows;
   for (auto* item : sel)
     rows.insert(item->row());
 
@@ -1104,7 +1088,8 @@ void TranslationTab::onAiTranslateClicked()
   for (int r : sortedRows) {
     auto* uuidItem = m_table->item(r, 0);
     auto* origItem = m_table->item(r, 1);
-    if (!uuidItem || !origItem) continue;
+    if (!uuidItem || !origItem)
+      continue;
     const QString uuid = uuidItem->text();
     const QString orig = origItem->text();
     if (!uuid.isEmpty() && !orig.isEmpty())
@@ -1117,14 +1102,13 @@ void TranslationTab::onAiTranslateClicked()
   }
 
   setAiBusy(true);
-  m_aiStatusLabel->setText(
-      tr("Translating %1 strings in %2 batches…")
-          .arg(toTranslate.size())
-          .arg((toTranslate.size() + LWizardAiTranslator::kBatchSize - 1) /
-               LWizardAiTranslator::kBatchSize));
+  m_aiStatusLabel->setText(tr("Translating %1 strings in %2 batches…")
+                               .arg(toTranslate.size())
+                               .arg((toTranslate.size() + LWizardAiTranslator::kBatchSize - 1) /
+                                    LWizardAiTranslator::kBatchSize));
 
-  m_aiTranslator->translate(toTranslate, m_originalStrings, m_translations,
-                            currentDstLang(), currentSrcLang());
+  m_aiTranslator->translate(
+      toTranslate, m_originalStrings, m_translations, currentDstLang(), currentSrcLang());
 }
 
 void TranslationTab::applyAiBatchToTable(const QMap<QString, QString>& results)
@@ -1133,7 +1117,8 @@ void TranslationTab::applyAiBatchToTable(const QMap<QString, QString>& results)
   for (int r = 0; r < m_table->rowCount(); ++r) {
     auto* uuidItem  = m_table->item(r, 0);
     auto* transItem = m_table->item(r, 2);
-    if (!uuidItem || !transItem) continue;
+    if (!uuidItem || !transItem)
+      continue;
 
     const QString uuid = uuidItem->text();
     if (results.contains(uuid)) {
@@ -1141,7 +1126,10 @@ void TranslationTab::applyAiBatchToTable(const QMap<QString, QString>& results)
       m_translations[uuid] = results.value(uuid);
       // Also update allRows cache
       for (Row& row : m_allRows) {
-        if (row.uuid == uuid) { row.translated = results.value(uuid); break; }
+        if (row.uuid == uuid) {
+          row.translated = results.value(uuid);
+          break;
+        }
       }
     }
   }
@@ -1165,8 +1153,7 @@ void TranslationTab::onAiFinished()
 {
   setAiBusy(false);
   m_aiStatusLabel->setText(tr("Translation complete. Review and edit as needed."));
-  LWizardLog::info(QStringLiteral("AI translation finished for '%1'")
-                       .arg(m_currentMod));
+  LWizardLog::info(QStringLiteral("AI translation finished for '%1'").arg(m_currentMod));
 }
 
 void TranslationTab::onAiError(const QString& message)
@@ -1203,19 +1190,13 @@ void TranslationTab::onCopyPromptToClipboard()
   }
 
   const QString prompt = m_aiTranslator->buildClipboardPrompt(
-      selected,
-      m_originalStrings,
-      m_translations,
-      currentDstLang(),
-      currentSrcLang());
+      selected, m_originalStrings, m_translations, currentDstLang(), currentSrcLang());
 
   QApplication::clipboard()->setText(prompt);
-  m_aiStatusLabel->setText(
-      tr("Prompt for %1 string(s) copied to clipboard. "
-         "Paste into any AI chat, then click \"Import from Clipboard\".")
-          .arg(selected.size()));
-  LWizardLog::info(QStringLiteral("Clipboard prompt built for %1 strings.")
-                       .arg(selected.size()));
+  m_aiStatusLabel->setText(tr("Prompt for %1 string(s) copied to clipboard. "
+                              "Paste into any AI chat, then click \"Import from Clipboard\".")
+                               .arg(selected.size()));
+  LWizardLog::info(QStringLiteral("Clipboard prompt built for %1 strings.").arg(selected.size()));
 }
 
 void TranslationTab::onImportFromClipboard()
@@ -1226,20 +1207,17 @@ void TranslationTab::onImportFromClipboard()
     return;
   }
 
-  const QMap<QString, QString> results =
-      LWizardAiTranslator::importFromClipboardText(text);
+  const QMap<QString, QString> results = LWizardAiTranslator::importFromClipboardText(text);
 
   if (results.isEmpty()) {
-    m_aiStatusLabel->setText(
-        tr("Could not parse translations from clipboard. "
-           "Make sure the AI replied with the JSON block as instructed."));
+    m_aiStatusLabel->setText(tr("Could not parse translations from clipboard. "
+                                "Make sure the AI replied with the JSON block as instructed."));
     LWizardLog::warn(QStringLiteral("Clipboard import: no translations found in text."));
     return;
   }
 
   applyAiBatchToTable(results);
-  m_aiStatusLabel->setText(
-      tr("Imported %1 translation(s) from clipboard.").arg(results.size()));
-  LWizardLog::info(QStringLiteral("Clipboard import: applied %1 translations.")
-                       .arg(results.size()));
+  m_aiStatusLabel->setText(tr("Imported %1 translation(s) from clipboard.").arg(results.size()));
+  LWizardLog::info(
+      QStringLiteral("Clipboard import: applied %1 translations.").arg(results.size()));
 }

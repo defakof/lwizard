@@ -20,7 +20,7 @@
 namespace MOBase {
 class IOrganizer;
 class IFileTree;
-}  // namespace MOBase
+} // namespace MOBase
 
 /**
  * ModDataContent feature that detects BG3 localization status for each mod.
@@ -31,7 +31,8 @@ class IFileTree;
  *   2 - Available        : translation available on NexusMods (not installed)
  *   3 - Outdated         : translation installed but a newer version exists
  *   4 - Unavailable      : no localization found for the scan language
- *   5 - Translation mod  : UUID overlap with another mod’s embedded loca (same strings, different language)
+ *   5 - Translation mod  : UUID overlap with another mod’s embedded loca (same strings, different
+ * language)
  *
  * Icons appear only after an explicit scanAll() call. Before that the column
  * is empty for this feature.
@@ -41,19 +42,18 @@ class BG3LocalizationContent : public QObject, public MOBase::ModDataContent
   Q_OBJECT
 public:
   // Content column IDs — order must match getAllContents()
-  static constexpr int CONTENT_EMBEDDED    = 0;
-  static constexpr int CONTENT_INSTALLED   = 1;
-  static constexpr int CONTENT_AVAILABLE   = 2;
-  static constexpr int CONTENT_OUTDATED    = 3;
-  static constexpr int CONTENT_UNAVAILABLE = 4;
+  static constexpr int CONTENT_EMBEDDED        = 0;
+  static constexpr int CONTENT_INSTALLED       = 1;
+  static constexpr int CONTENT_AVAILABLE       = 2;
+  static constexpr int CONTENT_OUTDATED        = 3;
+  static constexpr int CONTENT_UNAVAILABLE     = 4;
   static constexpr int CONTENT_TRANSLATION_MOD = 5;
-  static constexpr int CONTENT_NONE        = -1;  // not yet scanned
+  static constexpr int CONTENT_NONE            = -1; // not yet scanned
 
   explicit BG3LocalizationContent(MOBase::IOrganizer* organizer);
 
   std::vector<Content> getAllContents() const override;
-  std::vector<int>
-  getContentsFor(std::shared_ptr<const MOBase::IFileTree> fileTree) const override;
+  std::vector<int> getContentsFor(std::shared_ptr<const MOBase::IFileTree> fileTree) const override;
 
   /**
    * Drop in-memory scan results (does not erase disk cache).
@@ -85,8 +85,7 @@ public:
    * reader for .loca files; call from a background thread for large mods.
    * Returns empty map if the mod has no localization for that language.
    */
-  QMap<QString, QString> loadStringsSync(const QString& modName,
-                                         const QString& language) const;
+  QMap<QString, QString> loadStringsSync(const QString& modName, const QString& language) const;
 
   /** Returns the paired base mod for a translation mod, or an empty string. */
   QString translationTargetFor(const QString& modName) const;
@@ -153,17 +152,17 @@ private:
 
   struct SingleModScanResult
   {
-    QString modName;
-    QString language;
-    QString modPath;
-    QString fingerprint;
-    QString translationTarget;
-    QByteArray embeddedStrings;
+    QString       modName;
+    QString       language;
+    QString       modPath;
+    QString       fingerprint;
+    QString       translationTarget;
+    QByteArray    embeddedStrings;
     QSet<QString> uuidKeys;
-    int  baseContentId  = CONTENT_NONE;
-    int  finalContentId = CONTENT_NONE;
-    bool valid          = false;
-    bool cacheHit       = false;
+    int           baseContentId  = CONTENT_NONE;
+    int           finalContentId = CONTENT_NONE;
+    bool          valid          = false;
+    bool          cacheHit       = false;
   };
 
   struct CacheEntry
@@ -171,10 +170,10 @@ private:
     QString language;
     int     contentId = CONTENT_NONE;
     /** Fingerprint of on-disk files relevant to localization; empty = unknown. */
-    QString fingerprint;
-    QString translationTarget;
+    QString     fingerprint;
+    QString     translationTarget;
     QStringList separateTranslations;
-    bool relationshipsKnown = false;
+    bool        relationshipsKnown = false;
     /** Nexus Mods translation mod IDs discovered by the Nexus tab scanner. */
     QList<int> nexusTranslationModIds;
   };
@@ -186,17 +185,19 @@ private:
   QSet<QString>  m_autoScanPending;
   bool           m_autoScanRunning = false;
 
-  QString currentLanguage() const;
-  bool    cacheOnlyCurrentLanguage() const;
+  QString     currentLanguage() const;
+  bool        cacheOnlyCurrentLanguage() const;
   QStringList validModNames() const;
 
   /** Returns CONTENT_EMBEDDED if localization is found, CONTENT_UNAVAILABLE otherwise. */
   int  detectContentId(std::shared_ptr<const MOBase::IFileTree> tree,
-                       const QString& language, PakManifestCache* pakManifestCache = nullptr,
-                       ScanMetrics* metrics = nullptr) const;
-  bool pakHasLocalization(const QString& pakPath, const QString& language,
+                       const QString&                           language,
+                       PakManifestCache*                        pakManifestCache = nullptr,
+                       ScanMetrics*                             metrics          = nullptr) const;
+  bool pakHasLocalization(const QString&    pakPath,
+                          const QString&    language,
                           PakManifestCache* pakManifestCache = nullptr,
-                          ScanMetrics* metrics = nullptr) const;
+                          ScanMetrics*      metrics          = nullptr) const;
 
   void    savePersistentFromMemory();
   void    savePersistentFromMemory(const QHash<QString, CacheEntry>& entries);
@@ -205,36 +206,38 @@ private:
 
   // Embedded strings cache (UUID -> string), persisted separately from icon cache.
   QByteArray loadEmbeddedStringsBlob(const QString& modName, const QString& lang) const;
-  void       saveEmbeddedStringsBlob(const QString& modName, const QString& lang,
-                                     const QString& modPath, const QString& fingerprint,
+  void       saveEmbeddedStringsBlob(const QString&    modName,
+                                     const QString&    lang,
+                                     const QString&    modPath,
+                                     const QString&    fingerprint,
                                      const QByteArray& compressedJson);
-  void       saveEmbeddedStringsBlobs(
-            const QHash<QString, QByteArray>& compressedJsonByMod,
-            const QHash<QString, QString>& modPathByMod,
-            const QHash<QString, QString>& fingerprintByMod,
-            const QString& lang);
+  void       saveEmbeddedStringsBlobs(const QHash<QString, QByteArray>& compressedJsonByMod,
+                                      const QHash<QString, QString>&    modPathByMod,
+                                      const QHash<QString, QString>&    fingerprintByMod,
+                                      const QString&                    lang);
   QMap<QString, QString> parseEmbeddedStringsCompressedJson(const QByteArray& compressedJson) const;
 
-  QByteArray buildEmbeddedStringsForMod(const QString& modAbsPath, const QString& lang,
+  QByteArray buildEmbeddedStringsForMod(const QString&    modAbsPath,
+                                        const QString&    lang,
                                         PakManifestCache* pakManifestCache = nullptr,
-                                        ScanMetrics* metrics = nullptr) const;
+                                        ScanMetrics*      metrics          = nullptr) const;
   QByteArray locaFileToJsonMapCompressed(const QString& locaAbsPath,
-                                         ScanMetrics* metrics = nullptr) const;
+                                         ScanMetrics*   metrics = nullptr) const;
   QByteArray mergeJsonMapsCompressed(const QList<QByteArray>& compressedJsonMaps) const;
 
-  QStringList listPakFileEntries(const QString& pakPath,
+  QStringList listPakFileEntries(const QString&    pakPath,
                                  PakManifestCache* pakManifestCache = nullptr,
-                                 ScanMetrics* metrics = nullptr) const;
+                                 ScanMetrics*      metrics          = nullptr) const;
   void        collectPakPathsUnderMod(const QString& modAbsPath, QStringList* outPaks) const;
 
-  QSet<QString> uuidKeysFromCompressed(const QByteArray& compressedJson) const;
+  QSet<QString>                 uuidKeysFromCompressed(const QByteArray& compressedJson) const;
   QHash<QString, QSet<QString>> preloadPersistentUuidKeys() const;
-  QSet<QString> discoverLanguagesInMod(const QString& modAbsPath,
-                                       PakManifestCache* pakManifestCache = nullptr,
-                                       ScanMetrics* metrics = nullptr) const;
-  QSet<QString> uuidKeysUnionAllLanguages(const QString& modAbsPath,
-                                          PakManifestCache* pakManifestCache = nullptr,
-                                          ScanMetrics* metrics = nullptr) const;
+  QSet<QString>                 discoverLanguagesInMod(const QString&    modAbsPath,
+                                                       PakManifestCache* pakManifestCache = nullptr,
+                                                       ScanMetrics*      metrics = nullptr) const;
+  QSet<QString>                 uuidKeysUnionAllLanguages(const QString&    modAbsPath,
+                                                          PakManifestCache* pakManifestCache = nullptr,
+                                                          ScanMetrics*      metrics = nullptr) const;
 
   /**
    * UUID overlap vs another mod: returns (contentId, matchedRefModName).
@@ -242,20 +245,19 @@ private:
    * otherwise overlap → CONTENT_INSTALLED (other-language / redundant for scan).
    */
   QPair<int, QString> applyTranslationModClassification(
-      const QString& modName, int baseContentId, const QStringList& allModNames,
-      const QHash<QString, int>& baseIdThisScan,
+      const QString&                       modName,
+      int                                  baseContentId,
+      const QStringList&                   allModNames,
+      const QHash<QString, int>&           baseIdThisScan,
       const QHash<QString, QSet<QString>>& uuidsThisScan,
-      const QHash<QString, QSet<QString>>& persistentUuidsByMod =
-          QHash<QString, QSet<QString>>(),
-      const QHash<QString, QStringList>& uuidIndexByUuid =
-          QHash<QString, QStringList>()) const;
+      const QHash<QString, QSet<QString>>& persistentUuidsByMod = QHash<QString, QSet<QString>>(),
+      const QHash<QString, QStringList>&   uuidIndexByUuid = QHash<QString, QStringList>()) const;
 
-  SingleModScanResult computeSingleModScan(const QString& modName,
-                                           const QString& language) const;
+  SingleModScanResult computeSingleModScan(const QString& modName, const QString& language) const;
   void                applySingleModScanResult(const SingleModScanResult& result);
   void                finishAutoScan(const QString& modName);
   void                startNextQueuedAutoScan();
 
   QSet<QString> embeddedUuidKeysUnionFromPersistent(const QString& modName) const;
-  CacheEntry entryForCurrentLanguage(const QString& modName) const;
+  CacheEntry    entryForCurrentLanguage(const QString& modName) const;
 };

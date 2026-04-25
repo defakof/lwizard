@@ -21,4 +21,4 @@ QString existingExecutable(MOBase::IOrganizer* organizer);
  */
 void ensureDownloadedIfMissing(MOBase::IOrganizer* organizer);
 
-}  // namespace LWizardDivine
+} // namespace LWizardDivine

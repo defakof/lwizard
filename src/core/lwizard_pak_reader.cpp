@@ -21,8 +21,14 @@ public:
   PakHandle(const PakHandle&)            = delete;
   PakHandle& operator=(const PakHandle&) = delete;
 
-  explicit operator bool() const { return m_pak != nullptr; }
-  Bg3Pak* get() const { return m_pak; }
+  explicit operator bool() const
+  {
+    return m_pak != nullptr;
+  }
+  Bg3Pak* get() const
+  {
+    return m_pak;
+  }
 
 private:
   Bg3Pak* m_pak = nullptr;
@@ -41,8 +47,14 @@ public:
   BytesHandle(const BytesHandle&)            = delete;
   BytesHandle& operator=(const BytesHandle&) = delete;
 
-  explicit operator bool() const { return m_bytes != nullptr; }
-  const Bg3Bytes* get() const { return m_bytes; }
+  explicit operator bool() const
+  {
+    return m_bytes != nullptr;
+  }
+  const Bg3Bytes* get() const
+  {
+    return m_bytes;
+  }
 
 private:
   Bg3Bytes* m_bytes = nullptr;
@@ -57,7 +69,7 @@ QByteArray toByteArray(const BytesHandle& bytes)
                     static_cast<qsizetype>(bytes.get()->len));
 }
 
-}  // namespace
+} // namespace
 
 namespace LWizardPakReader {
 
@@ -105,10 +117,10 @@ QByteArray locaBytesToJsonCompressed(const QByteArray& locaBytes)
   if (locaBytes.isEmpty())
     return {};
 
-  const BytesHandle out(bg3loca_to_json_compressed(
-      reinterpret_cast<const uint8_t*>(locaBytes.constData()),
-      static_cast<size_t>(locaBytes.size())));
+  const BytesHandle out(
+      bg3loca_to_json_compressed(reinterpret_cast<const uint8_t*>(locaBytes.constData()),
+                                 static_cast<size_t>(locaBytes.size())));
   return toByteArray(out);
 }
 
-}  // namespace LWizardPakReader
+} // namespace LWizardPakReader

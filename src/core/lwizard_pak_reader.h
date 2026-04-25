@@ -37,4 +37,4 @@ QByteArray readFile(const QString& pakPath, const QString& entryPath);
  */
 QByteArray locaBytesToJsonCompressed(const QByteArray& locaBytes);
 
-}  // namespace LWizardPakReader
+} // namespace LWizardPakReader

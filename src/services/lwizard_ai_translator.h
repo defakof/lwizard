@@ -34,7 +34,11 @@ public:
   static constexpr int kMaxRetries      = 4;
 
   // Available models shown in the UI (display name → API name)
-  struct ModelInfo { QString display; QString apiName; };
+  struct ModelInfo
+  {
+    QString display;
+    QString apiName;
+  };
   static const QList<ModelInfo>& availableModels();
 
   explicit LWizardAiTranslator(QObject* parent = nullptr);
@@ -43,14 +47,14 @@ public:
   bool hasApiKey() const;
 
   /** Set which model to use (apiName from availableModels()). */
-  void setModel(const QString& apiName);
+  void    setModel(const QString& apiName);
   QString model() const;
 
   void translate(const QList<QPair<QString, QString>>& ordered,
-                 const QMap<QString, QString>& allOriginals,
-                 const QMap<QString, QString>& allTranslated,
-                 const QString& targetLang,
-                 const QString& sourceLang = QStringLiteral("English"));
+                 const QMap<QString, QString>&         allOriginals,
+                 const QMap<QString, QString>&         allTranslated,
+                 const QString&                        targetLang,
+                 const QString&                        sourceLang = QStringLiteral("English"));
 
   /**
    * Build a self-contained clipboard prompt for ALL selected strings at once.
@@ -58,12 +62,11 @@ public:
    * The prompt instructs the AI to reply in a specific JSON envelope that
    * importFromClipboard() can parse directly.
    */
-  QString buildClipboardPrompt(
-      const QList<QPair<QString, QString>>& selected,
-      const QMap<QString, QString>& allOriginals,
-      const QMap<QString, QString>& allTranslated,
-      const QString& targetLang,
-      const QString& sourceLang = QStringLiteral("English")) const;
+  QString buildClipboardPrompt(const QList<QPair<QString, QString>>& selected,
+                               const QMap<QString, QString>&         allOriginals,
+                               const QMap<QString, QString>&         allTranslated,
+                               const QString&                        targetLang,
+                               const QString& sourceLang = QStringLiteral("English")) const;
 
   /**
    * Parse a clipboard string that contains the AI's response.
@@ -94,9 +97,9 @@ private:
   int                    m_retries   = 0;
 
   QList<QList<QPair<QString, QString>>> m_batches;
-  int                    m_batchIdx   = 0;
-  int                    m_doneItems  = 0;
-  int                    m_totalItems = 0;
+  int                                   m_batchIdx   = 0;
+  int                                   m_doneItems  = 0;
+  int                                   m_totalItems = 0;
 
   QMap<QString, QString> m_allOriginals;
   QMap<QString, QString> m_allTranslated;
@@ -109,7 +112,7 @@ private:
   QString    buildSystemPrompt() const;
   QString    buildUserMessage(const QList<QPair<QString, QString>>& batch) const;
 
-  QMap<QString, QString> parseResponse(const QByteArray& body) const;
+  QMap<QString, QString>        parseResponse(const QByteArray& body) const;
   static QMap<QString, QString> extractTranslationsJson(const QString& text);
 
   // Parse "Please retry in X.Xs" from Gemini error body → seconds (0 = unknown)

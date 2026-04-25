@@ -2,41 +2,41 @@ cmake_minimum_required(VERSION 3.22)
 project(lwizard LANGUAGES CXX)
 
 # ---- bg3rustpaklib (Rust staticlib, ffi feature) ----------------------------
-set(BG3RUSTPAKLIB_DIR "${CMAKE_CURRENT_LIST_DIR}/../bg3rustpaklib"
-    CACHE PATH "Path to bg3rustpaklib source directory")
+set(BG3RUSTPAKLIB_DIR "${CMAKE_CURRENT_LIST_DIR}/../bg3rustpaklib" CACHE PATH
+    "Path to bg3rustpaklib source directory")
 
 file(GLOB _RUST_MSI_BIN_DIRS LIST_DIRECTORIES true
     "$ENV{ProgramFiles}/Rust stable MSVC */bin")
 
 find_program(CARGO_EXECUTABLE NAMES cargo cargo.exe REQUIRED
-    HINTS
-      "$ENV{USERPROFILE}/.cargo/bin"
-      "$ENV{HOME}/.cargo/bin"
-      ${_RUST_MSI_BIN_DIRS})
+  HINTS
+    "$ENV{USERPROFILE}/.cargo/bin"
+    "$ENV{HOME}/.cargo/bin"
+    ${_RUST_MSI_BIN_DIRS})
 get_filename_component(_RUST_BIN_DIR "${CARGO_EXECUTABLE}" DIRECTORY)
 if(WIN32)
-    set(_RUST_BUILD_PATH "PATH=${_RUST_BIN_DIR};$ENV{PATH}")
+  set(_RUST_BUILD_PATH "PATH=${_RUST_BIN_DIR};$ENV{PATH}")
 else()
-    set(_RUST_BUILD_PATH "PATH=${_RUST_BIN_DIR}:$ENV{PATH}")
+  set(_RUST_BUILD_PATH "PATH=${_RUST_BIN_DIR}:$ENV{PATH}")
 endif()
 
 set(_BG3PAK_LIB "${BG3RUSTPAKLIB_DIR}/target/release/bg3rustpaklib.lib")
 
 add_custom_target(bg3rustpaklib_build ALL
-    COMMAND "${CMAKE_COMMAND}" -E env "${_RUST_BUILD_PATH}"
-            "${CARGO_EXECUTABLE}" rustc
-            --release
-            --features ffi
-            --crate-type=staticlib
-            --manifest-path "${BG3RUSTPAKLIB_DIR}/Cargo.toml"
-    COMMENT "Building bg3rustpaklib (Rust staticlib)"
-    BYPRODUCTS "${_BG3PAK_LIB}"
+  COMMAND "${CMAKE_COMMAND}" -E env "${_RUST_BUILD_PATH}"
+          "${CARGO_EXECUTABLE}" rustc
+          --release
+          --features ffi
+          --crate-type=staticlib
+          --manifest-path "${BG3RUSTPAKLIB_DIR}/Cargo.toml"
+  COMMENT "Building bg3rustpaklib (Rust staticlib)"
+  BYPRODUCTS "${_BG3PAK_LIB}"
 )
 
 add_library(bg3rustpaklib STATIC IMPORTED GLOBAL)
 set_target_properties(bg3rustpaklib PROPERTIES
-    IMPORTED_LOCATION             "${_BG3PAK_LIB}"
-    INTERFACE_INCLUDE_DIRECTORIES "${BG3RUSTPAKLIB_DIR}/include"
+  IMPORTED_LOCATION "${_BG3PAK_LIB}"
+  INTERFACE_INCLUDE_DIRECTORIES "${BG3RUSTPAKLIB_DIR}/include"
 )
 add_dependencies(bg3rustpaklib bg3rustpaklib_build)
 # ------------------------------------------------------------------------------
@@ -47,7 +47,8 @@ set(LWIZARD_SOURCE_ROOT "${CMAKE_CURRENT_LIST_DIR}/src")
 
 get_filename_component(_LWIZARD_UIBASE_CMAKE
   "${CMAKE_CURRENT_LIST_DIR}/../uibase_install/lib/cmake/mo2-uibase" ABSOLUTE)
-set(mo2-uibase_DIR "${_LWIZARD_UIBASE_CMAKE}" CACHE PATH "mo2-uibase CMake package directory" FORCE)
+set(mo2-uibase_DIR "${_LWIZARD_UIBASE_CMAKE}" CACHE PATH
+    "mo2-uibase CMake package directory" FORCE)
 
 # Portable MO2 layout: ModOrganizer.exe and plugins/ share the same folder (no bin/).
 set(MO2_INSTALL_IS_BIN ON CACHE BOOL "Install runtime next to ModOrganizer.exe" FORCE)
@@ -74,10 +75,10 @@ set_target_properties(lwizard_common PROPERTIES
 )
 target_include_directories(lwizard_common PUBLIC "${LWIZARD_SOURCE_ROOT}")
 target_link_libraries(lwizard_common PRIVATE
-    mo2::uibase Qt6::Widgets
-    bg3rustpaklib
-    # Windows system libs required by the Rust standard library
-    ws2_32 userenv ntdll bcrypt
+  mo2::uibase Qt6::Widgets
+  bg3rustpaklib
+  # Windows system libs required by the Rust standard library
+  ws2_32 userenv ntdll bcrypt
 )
 
 add_library(lwizard SHARED)

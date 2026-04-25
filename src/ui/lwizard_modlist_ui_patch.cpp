@@ -26,8 +26,9 @@ enum LinkedHighlightKind
   HighlightBase        = 2,
 };
 
-QString resolveModName(MOBase::IOrganizer* organizer, QAbstractItemModel* model,
-                       const QModelIndex& index)
+QString resolveModName(MOBase::IOrganizer* organizer,
+                       QAbstractItemModel* model,
+                       const QModelIndex&  index)
 {
   if (!organizer || !model || !index.isValid())
     return {};
@@ -62,7 +63,7 @@ QColor baseHighlightColor()
   return QColor(244, 196, 234, 110);
 }
 
-}  // namespace
+} // namespace
 
 class LinkedHighlightProxyModel : public QIdentityProxyModel
 {
@@ -74,9 +75,8 @@ public:
   QVariant data(const QModelIndex& index, int role) const override
   {
     if (role == Qt::BackgroundRole && index.isValid()) {
-      const QString modName =
-          resolveModName(m_organizer, sourceModel(), mapToSource(index));
-      const auto it = m_highlightedMods.constFind(modName);
+      const QString modName = resolveModName(m_organizer, sourceModel(), mapToSource(index));
+      const auto    it      = m_highlightedMods.constFind(modName);
       if (it != m_highlightedMods.constEnd()) {
         if (it.value() == HighlightTranslation)
           return translationHighlightColor();
@@ -107,8 +107,7 @@ private:
     if (rows <= 0 || cols <= 0)
       return;
 
-    emit dataChanged(index(0, 0, parent), index(rows - 1, cols - 1, parent),
-                     {Qt::BackgroundRole});
+    emit dataChanged(index(0, 0, parent), index(rows - 1, cols - 1, parent), {Qt::BackgroundRole});
 
     for (int row = 0; row < rows; ++row)
       emitBackgroundChanged(index(row, 0, parent));
@@ -119,9 +118,9 @@ private:
   QHash<QString, int> m_highlightedMods;
 };
 
-LWizardModListUiPatch::LWizardModListUiPatch(
-    MOBase::IOrganizer* organizer, std::shared_ptr<BG3LocalizationContent> content,
-    QObject* parent)
+LWizardModListUiPatch::LWizardModListUiPatch(MOBase::IOrganizer*                     organizer,
+                                             std::shared_ptr<BG3LocalizationContent> content,
+                                             QObject*                                parent)
     : QObject(parent), m_organizer(organizer), m_content(std::move(content))
 {}
 
@@ -164,9 +163,8 @@ void LWizardModListUiPatch::ensureInstalled()
     m_proxy = new LinkedHighlightProxyModel(m_organizer, this);
 
   if (currentModel != m_proxy) {
-    const QStringList selected =
-        selectedMods().values();
-    const QString currentMod = modNameForIndex(m_modList->currentIndex());
+    const QStringList selected   = selectedMods().values();
+    const QString     currentMod = modNameForIndex(m_modList->currentIndex());
 
     m_proxy->setSourceModel(currentModel);
     m_modList->setModel(m_proxy);
@@ -195,8 +193,8 @@ bool LWizardModListUiPatch::eventFilter(QObject* watched, QEvent* event)
   if (event->type() != QEvent::ToolTip)
     return QObject::eventFilter(watched, event);
 
-  auto* helpEvent = static_cast<QHelpEvent*>(event);
-  const QModelIndex index = m_modList->indexAt(helpEvent->pos());
+  auto*             helpEvent = static_cast<QHelpEvent*>(event);
+  const QModelIndex index     = m_modList->indexAt(helpEvent->pos());
   if (!index.isValid() || index.column() != kContentColumn || !m_content)
     return QObject::eventFilter(watched, event);
 
@@ -266,14 +264,14 @@ QHash<QString, int> LWizardModListUiPatch::highlightedModKinds() const
   return highlighted;
 }
 
-QModelIndex LWizardModListUiPatch::findModIndex(const QString& modName,
+QModelIndex LWizardModListUiPatch::findModIndex(const QString&     modName,
                                                 const QModelIndex& parent) const
 {
   if (!m_modList || !m_modList->model())
     return {};
 
   QAbstractItemModel* model = m_modList->model();
-  const int rows            = model->rowCount(parent);
+  const int           rows  = model->rowCount(parent);
   for (int row = 0; row < rows; ++row) {
     const QModelIndex rowIndex = model->index(row, 0, parent);
     if (!rowIndex.isValid())
@@ -299,20 +297,22 @@ void LWizardModListUiPatch::reconnectSelectionModel()
     return;
 
   QItemSelectionModel* selectionModel = m_modList->selectionModel();
-  m_selectionChangedConnection =
-      connect(selectionModel, &QItemSelectionModel::selectionChanged, this,
-              [this](const QItemSelection&, const QItemSelection&) {
-                refreshFromSelection();
-              });
-  m_currentChangedConnection =
-      connect(selectionModel, &QItemSelectionModel::currentChanged, this,
-              [this](const QModelIndex&, const QModelIndex&) {
-                refreshFromSelection();
-              });
+  m_selectionChangedConnection        = connect(selectionModel,
+                                         &QItemSelectionModel::selectionChanged,
+                                         this,
+                                         [this](const QItemSelection&, const QItemSelection&) {
+                                           refreshFromSelection();
+                                         });
+  m_currentChangedConnection          = connect(selectionModel,
+                                       &QItemSelectionModel::currentChanged,
+                                       this,
+                                       [this](const QModelIndex&, const QModelIndex&) {
+                                         refreshFromSelection();
+                                       });
 }
 
 void LWizardModListUiPatch::restoreSelection(const QStringList& selectedMods,
-                                             const QString& currentMod)
+                                             const QString&     currentMod)
 {
   if (!m_modList || !m_modList->selectionModel())
     return;
@@ -329,8 +329,8 @@ void LWizardModListUiPatch::restoreSelection(const QStringList& selectedMods,
 
   const QModelIndex currentIndex = currentMod.isEmpty() ? QModelIndex() : findModIndex(currentMod);
   if (currentIndex.isValid()) {
-    selectionModel->setCurrentIndex(
-        currentIndex, QItemSelectionModel::NoUpdate | QItemSelectionModel::Rows);
+    selectionModel->setCurrentIndex(currentIndex,
+                                    QItemSelectionModel::NoUpdate | QItemSelectionModel::Rows);
     m_modList->scrollTo(currentIndex);
   }
 }

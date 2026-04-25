@@ -16,16 +16,16 @@ class QNetworkReply;
 
 struct NexusTranslationFile
 {
-  int     modId    = 0;
-  int     fileId   = 0;
-  QString modName;            ///< Display name of the translation mod
-  QString fileDisplayName;    ///< Human-readable name of the specific file
-  QString fileName;           ///< Archive file name (ModName-123-1.0-ts.7z)
+  int     modId  = 0;
+  int     fileId = 0;
+  QString modName;         ///< Display name of the translation mod
+  QString fileDisplayName; ///< Human-readable name of the specific file
+  QString fileName;        ///< Archive file name (ModName-123-1.0-ts.7z)
   QString version;
-  qint64  updatedTimestamp = 0;  ///< Unix seconds
+  qint64  updatedTimestamp = 0; ///< Unix seconds
   qint64  sizeKb           = 0;
   QString modPageUrl;
-  QString category;   ///< "MAIN", "OPTIONAL", etc.
+  QString category; ///< "MAIN", "OPTIONAL", etc.
 };
 
 // ---------------------------------------------------------------------------
@@ -56,7 +56,7 @@ public:
 
   void    setApiKey(const QString& key);
   bool    hasApiKey() const;
-  QString apiKey()    const;
+  QString apiKey() const;
 
   /** Convert our language name to the Nexus flag slug used in HTML class names. */
   static QString toNexusLanguage(const QString& language);
@@ -66,9 +66,7 @@ public:
    * nexusModId — Nexus mod ID of the *original* (untranslated) mod.
    * language   — our language name ("Russian", "German", …).
    */
-  void searchTranslations(const QString& requestId,
-                          int            nexusModId,
-                          const QString& language);
+  void searchTranslations(const QString& requestId, int nexusModId, const QString& language);
 
   /**
    * Queue a Nexus translation search triggered by a mod install event.
@@ -86,8 +84,7 @@ public:
   void cancelAll();
 
 signals:
-  void translationsReady(const QString& requestId,
-                         const QList<NexusTranslationFile>& files);
+  void translationsReady(const QString& requestId, const QList<NexusTranslationFile>& files);
   void searchError(const QString& requestId, const QString& error);
   void searchProgress(const QString& requestId, const QString& status);
 
@@ -97,25 +94,24 @@ private slots:
 
 private:
   // ── Internal search helpers ───────────────────────────────────────────────
-  QList<int> parseTranslationModIds(const QByteArray& html,
-                                    const QString&    nexusLang) const;
-  void startFileFetch(const QString&    reqId,
-                      const QList<int>& modIds,
-                      const QString&    nexusLang);
+  QList<int> parseTranslationModIds(const QByteArray& html, const QString& nexusLang) const;
+  void startFileFetch(const QString& reqId, const QList<int>& modIds, const QString& nexusLang);
 
-  struct PendingSearch {
-    QString      requestId;
-    QList<int>   translationModIds;
-    QString      nexusLang;
-    int          pending = 0;
+  struct PendingSearch
+  {
+    QString                     requestId;
+    QList<int>                  translationModIds;
+    QString                     nexusLang;
+    int                         pending = 0;
     QList<NexusTranslationFile> results;
-    QMutex       mutex;
+    QMutex                      mutex;
   };
 
   void finishSearch(const QString& reqId, QList<NexusTranslationFile> files);
 
   // ── Auto-scan queue (same pattern as BG3LocalizationContent::scanModAsync) ──
-  struct QueueEntry {
+  struct QueueEntry
+  {
     QString modName;
     int     nexusId;
     QString language;
@@ -124,7 +120,7 @@ private:
   void startNextQueued();
 
   QList<QueueEntry> m_queue;
-  QSet<QString>     m_queuePending;  ///< mod names currently queued or running
+  QSet<QString>     m_queuePending; ///< mod names currently queued or running
   bool              m_queueRunning = false;
   QMutex            m_queueMutex;
 

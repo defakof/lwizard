@@ -6,5 +6,6 @@
     <file>3_available.ico</file>
     <file>4_outdated.ico</file>
     <file>5_unavailable.ico</file>
+    <file>6_linked.ico</file>
   </qresource>
 </RCC>

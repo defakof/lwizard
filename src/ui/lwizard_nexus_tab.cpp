@@ -36,14 +36,12 @@ NexusTab::NexusTab(MOBase::IOrganizer*                     organizer,
                    std::shared_ptr<BG3LocalizationContent> content,
                    LWizardNexusApi*                        nexusApi,
                    QWidget*                                parent)
-    : QWidget(parent)
-    , m_organizer(organizer)
-    , m_content(std::move(content))
+    : QWidget(parent), m_organizer(organizer), m_content(std::move(content))
 {
   if (nexusApi) {
     // Use the plugin's shared API — reload key from disk in case it changed
-    m_api     = nexusApi;
-    m_ownApi  = false;
+    m_api             = nexusApi;
+    m_ownApi          = false;
     const QString key = loadApiKey();
     if (!key.isEmpty())
       m_api->setApiKey(key);
@@ -55,12 +53,9 @@ NexusTab::NexusTab(MOBase::IOrganizer*                     organizer,
   }
 
   // Connect tab-local slots — these are additive (plugin already has its own connections)
-  connect(m_api, &LWizardNexusApi::translationsReady,
-          this, &NexusTab::onTranslationsReady);
-  connect(m_api, &LWizardNexusApi::searchError,
-          this, &NexusTab::onSearchError);
-  connect(m_api, &LWizardNexusApi::searchProgress,
-          this, &NexusTab::onSearchProgress);
+  connect(m_api, &LWizardNexusApi::translationsReady, this, &NexusTab::onTranslationsReady);
+  connect(m_api, &LWizardNexusApi::searchError, this, &NexusTab::onSearchError);
+  connect(m_api, &LWizardNexusApi::searchProgress, this, &NexusTab::onSearchProgress);
 
   setupUi();
   populateModList();
@@ -84,8 +79,8 @@ NexusTab::~NexusTab()
 
 QString NexusTab::loadApiKey() const
 {
-  const QString path = m_organizer->basePath() +
-                       QStringLiteral("/plugins/lwizard/nexus_config.json");
+  const QString path =
+      m_organizer->basePath() + QStringLiteral("/plugins/lwizard/nexus_config.json");
   QFile f(path);
   if (!f.open(QIODevice::ReadOnly))
     return {};
@@ -95,8 +90,7 @@ QString NexusTab::loadApiKey() const
 
 void NexusTab::saveApiKey(const QString& key) const
 {
-  const QString dir = m_organizer->basePath() +
-                      QStringLiteral("/plugins/lwizard");
+  const QString dir = m_organizer->basePath() + QStringLiteral("/plugins/lwizard");
   QDir().mkpath(dir);
   QFile f(dir + QStringLiteral("/nexus_config.json"));
   if (!f.open(QIODevice::WriteOnly | QIODevice::Truncate))
@@ -162,9 +156,8 @@ void NexusTab::setupUi()
   leftLayout->addWidget(m_modTable, 1);
 
   auto* leftBtnRow = new QHBoxLayout;
-  m_scanAllBtn = new QPushButton(tr("Scan All"), leftPanel);
-  m_scanAllBtn->setToolTip(
-      tr("Search Nexus for translations of all mods with a Nexus ID."));
+  m_scanAllBtn     = new QPushButton(tr("Scan All"), leftPanel);
+  m_scanAllBtn->setToolTip(tr("Search Nexus for translations of all mods with a Nexus ID."));
   leftBtnRow->addWidget(m_scanAllBtn);
 
   auto* scanSelBtn = new QPushButton(tr("Scan Selected"), leftPanel);
@@ -187,9 +180,13 @@ void NexusTab::setupUi()
   rightLayout->addWidget(new QLabel(tr("Available translations:"), rightPanel));
 
   m_resultTable = new QTableWidget(0, 7, rightPanel);
-  m_resultTable->setHorizontalHeaderLabels({
-      tr("Original Mod"), tr("File"), tr("Version"),
-      tr("Updated"), tr("Size"), tr("Cat."), tr("Actions")});
+  m_resultTable->setHorizontalHeaderLabels({tr("Original Mod"),
+                                            tr("File"),
+                                            tr("Version"),
+                                            tr("Updated"),
+                                            tr("Size"),
+                                            tr("Cat."),
+                                            tr("Actions")});
   m_resultTable->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
   m_resultTable->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Stretch);
   m_resultTable->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
@@ -205,7 +202,7 @@ void NexusTab::setupUi()
 
   // ── Download All row ──────────────────────────────────────────────────────
   auto* dlAllRow = new QHBoxLayout;
-  m_dlAllBtn = new QPushButton(tr("Download All Latest"), rightPanel);
+  m_dlAllBtn     = new QPushButton(tr("Download All Latest"), rightPanel);
   m_dlAllBtn->setToolTip(
       tr("Queue the newest file from every translation found above into MO2 Downloads.\n"
          "Only the first (newest) file per unique translation mod is downloaded.\n"
@@ -232,9 +229,9 @@ void NexusTab::setupUi()
   // ── Connections ───────────────────────────────────────────────────────────
   connect(m_modFilter, &QLineEdit::textChanged, this, &NexusTab::onModFilterChanged);
   connect(m_scanAllBtn, &QPushButton::clicked, this, &NexusTab::onScanAllClicked);
-  connect(scanSelBtn,   &QPushButton::clicked, this, &NexusTab::onScanModClicked);
-  connect(m_clearBtn,   &QPushButton::clicked, this, &NexusTab::onClearResults);
-  connect(m_dlAllBtn,   &QPushButton::clicked, this, &NexusTab::onDownloadAllClicked);
+  connect(scanSelBtn, &QPushButton::clicked, this, &NexusTab::onScanModClicked);
+  connect(m_clearBtn, &QPushButton::clicked, this, &NexusTab::onClearResults);
+  connect(m_dlAllBtn, &QPushButton::clicked, this, &NexusTab::onDownloadAllClicked);
 }
 
 void NexusTab::populateModList()
@@ -243,8 +240,8 @@ void NexusTab::populateModList()
   m_modTable->setRowCount(0);
   m_modNexusIds.clear();
 
-  auto* modList = m_organizer->modList();
-  const QStringList names = modList->allModsByProfilePriority();
+  auto*             modList = m_organizer->modList();
+  const QStringList names   = modList->allModsByProfilePriority();
 
   for (const QString& name : names) {
     if (name.isEmpty())
@@ -256,7 +253,7 @@ void NexusTab::populateModList()
 
     const int nexusId = mod->nexusId();
     if (nexusId <= 0)
-      continue;  // no Nexus ID — skip
+      continue; // no Nexus ID — skip
 
     m_modNexusIds[name] = nexusId;
 
@@ -273,8 +270,7 @@ void NexusTab::populateModList()
   }
 
   m_modTable->setSortingEnabled(true);
-  m_statusLabel->setText(
-      tr("%1 mods with Nexus IDs found.").arg(m_modNexusIds.size()));
+  m_statusLabel->setText(tr("%1 mods with Nexus IDs found.").arg(m_modNexusIds.size()));
 }
 
 // ---------------------------------------------------------------------------
@@ -293,9 +289,9 @@ void NexusTab::onSaveApiKeyClicked()
 void NexusTab::onModFilterChanged(const QString& filter)
 {
   for (int row = 0; row < m_modTable->rowCount(); ++row) {
-    auto* item = m_modTable->item(row, 0);
-    const bool visible = filter.isEmpty() ||
-                         (item && item->text().contains(filter, Qt::CaseInsensitive));
+    auto*      item = m_modTable->item(row, 0);
+    const bool visible =
+        filter.isEmpty() || (item && item->text().contains(filter, Qt::CaseInsensitive));
     m_modTable->setRowHidden(row, !visible);
   }
 }
@@ -331,10 +327,11 @@ void NexusTab::onScanModClicked()
     return;
   }
 
-  QSet<int> rows;
+  QSet<int>   rows;
   QStringList toScan;
   for (auto* item : sel) {
-    if (rows.contains(item->row())) continue;
+    if (rows.contains(item->row()))
+      continue;
     rows.insert(item->row());
     const QString name = m_modTable->item(item->row(), 0)->text();
     toScan.append(name);
@@ -366,24 +363,24 @@ void NexusTab::startSearch(const QString& modName)
   }
 
   // Use the plugin's target language
-  QVariant v = m_organizer->pluginSetting(QStringLiteral("lwizard"),
-                                          QStringLiteral("language"));
-  QString lang;
+  QVariant v = m_organizer->pluginSetting(QStringLiteral("lwizard"), QStringLiteral("language"));
+  QString  lang;
   if (v.typeId() == QMetaType::QStringList) {
     const QStringList l = v.toStringList();
-    lang = l.isEmpty() ? QStringLiteral("Russian") : l.first();
+    lang                = l.isEmpty() ? QStringLiteral("Russian") : l.first();
   } else {
     lang = v.toString();
-    if (lang.isEmpty()) lang = QStringLiteral("Russian");
+    if (lang.isEmpty())
+      lang = QStringLiteral("Russian");
   }
 
   m_api->searchTranslations(modName, nexusId, lang);
 }
 
-void NexusTab::onTranslationsReady(const QString& requestId,
+void NexusTab::onTranslationsReady(const QString&                     requestId,
                                    const QList<NexusTranslationFile>& files)
 {
-  const QString modName = requestId;  // requestId == modName
+  const QString modName = requestId; // requestId == modName
 
   if (!files.isEmpty()) {
     addResultRows(modName, files);
@@ -403,8 +400,7 @@ void NexusTab::onTranslationsReady(const QString& requestId,
   if (m_pendingScans <= 0) {
     setScanning(false);
     const int resultRows = m_resultTable->rowCount();
-    m_statusLabel->setText(
-        tr("Scan complete. %1 translation file(s) found.").arg(resultRows));
+    m_statusLabel->setText(tr("Scan complete. %1 translation file(s) found.").arg(resultRows));
     LWizardLog::info(QStringLiteral("Nexus scan complete: %1 result row(s)").arg(resultRows));
     m_dlAllBtn->setEnabled(resultRows > 0 && m_organizer->downloadManager() != nullptr);
   }
@@ -419,8 +415,7 @@ void NexusTab::onSearchError(const QString& requestId, const QString& error)
 
   if (m_pendingScans <= 0) {
     setScanning(false);
-    m_statusLabel->setText(
-        tr("Scan finished with errors. Last error: %1").arg(error));
+    m_statusLabel->setText(tr("Scan finished with errors. Last error: %1").arg(error));
   }
 }
 
@@ -433,8 +428,7 @@ void NexusTab::onSearchProgress(const QString& requestId, const QString& status)
 // Add rows to result table
 // ---------------------------------------------------------------------------
 
-void NexusTab::addResultRows(const QString& modName,
-                             const QList<NexusTranslationFile>& files)
+void NexusTab::addResultRows(const QString& modName, const QList<NexusTranslationFile>& files)
 {
   // If API key was absent, we only have mod-level stubs (no fileId)
   if (files.isEmpty())
@@ -449,8 +443,11 @@ void NexusTab::addResultRows(const QString& modName,
       m_resultTable->insertRow(row);
 
       m_resultTable->setItem(row, 0, new QTableWidgetItem(modName));
-      m_resultTable->setItem(row, 1, new QTableWidgetItem(
-          QStringLiteral("Mod #%1 (no API key — file list unavailable)").arg(f.modId)));
+      m_resultTable->setItem(
+          row,
+          1,
+          new QTableWidgetItem(
+              QStringLiteral("Mod #%1 (no API key — file list unavailable)").arg(f.modId)));
       m_resultTable->setItem(row, 2, new QTableWidgetItem(QStringLiteral("—")));
       m_resultTable->setItem(row, 3, new QTableWidgetItem(QStringLiteral("—")));
       m_resultTable->setItem(row, 4, new QTableWidgetItem(QStringLiteral("—")));
@@ -461,8 +458,8 @@ void NexusTab::addResultRows(const QString& modName,
       actLayout->setContentsMargins(2, 2, 2, 2);
       actLayout->setSpacing(4);
 
-      const QString url = f.modPageUrl;
-      auto* openBtn = new QPushButton(tr("Open Page"), actWidget);
+      const QString url     = f.modPageUrl;
+      auto*         openBtn = new QPushButton(tr("Open Page"), actWidget);
       openBtn->setToolTip(url);
       connect(openBtn, &QPushButton::clicked, this, [url]() {
         QDesktopServices::openUrl(QUrl(url));
@@ -480,14 +477,12 @@ void NexusTab::addResultRows(const QString& modName,
 
     // Store modId / fileId in UserRole on col 0 so "Download All" can read them
     auto* modItem = new QTableWidgetItem(modName);
-    modItem->setData(Qt::UserRole,     f.modId);
+    modItem->setData(Qt::UserRole, f.modId);
     modItem->setData(Qt::UserRole + 1, f.fileId);
     m_resultTable->setItem(row, 0, modItem);
 
-    const QString displayName = f.fileDisplayName.isEmpty()
-                                    ? f.fileName
-                                    : f.fileDisplayName;
-    auto* fileItem = new QTableWidgetItem(displayName);
+    const QString displayName = f.fileDisplayName.isEmpty() ? f.fileName : f.fileDisplayName;
+    auto*         fileItem    = new QTableWidgetItem(displayName);
     fileItem->setToolTip(f.fileName);
     m_resultTable->setItem(row, 1, fileItem);
 
@@ -499,9 +494,8 @@ void NexusTab::addResultRows(const QString& modName,
                                 : QStringLiteral("—");
     m_resultTable->setItem(row, 3, new QTableWidgetItem(dateStr));
 
-    const QString sizeStr = f.sizeKb > 0
-                                ? QStringLiteral("%1 KB").arg(f.sizeKb)
-                                : QStringLiteral("—");
+    const QString sizeStr =
+        f.sizeKb > 0 ? QStringLiteral("%1 KB").arg(f.sizeKb) : QStringLiteral("—");
     m_resultTable->setItem(row, 4, new QTableWidgetItem(sizeStr));
 
     m_resultTable->setItem(row, 5, new QTableWidgetItem(f.category));
@@ -512,23 +506,23 @@ void NexusTab::addResultRows(const QString& modName,
     actLayout->setContentsMargins(2, 2, 2, 2);
     actLayout->setSpacing(4);
 
-    const int capturedModId  = f.modId;
-    const int capturedFileId = f.fileId;
-    const QString capturedUrl = f.modPageUrl;
+    const int     capturedModId  = f.modId;
+    const int     capturedFileId = f.fileId;
+    const QString capturedUrl    = f.modPageUrl;
 
     auto* dlBtn = new QPushButton(tr("Download"), actWidget);
     dlBtn->setToolTip(tr("Queue in MO2 Downloads via Nexus Mod Manager download."));
     connect(dlBtn, &QPushButton::clicked, this, [this, capturedModId, capturedFileId]() {
       if (!m_organizer->downloadManager()) {
-        QMessageBox::warning(this, tr("Download"),
-                             tr("MO2 download manager is not available."));
+        QMessageBox::warning(this, tr("Download"), tr("MO2 download manager is not available."));
         return;
       }
-      const int id = m_organizer->downloadManager()->startDownloadNexusFile(
-          capturedModId, capturedFileId);
+      const int id =
+          m_organizer->downloadManager()->startDownloadNexusFile(capturedModId, capturedFileId);
       if (id < 0)
         m_statusLabel->setText(tr("Download failed to start (mod %1, file %2).")
-                                   .arg(capturedModId).arg(capturedFileId));
+                                   .arg(capturedModId)
+                                   .arg(capturedFileId));
       else
         m_statusLabel->setText(tr("Download queued (id %1).").arg(id));
     });
@@ -552,27 +546,27 @@ void NexusTab::onDownloadAllClicked()
 {
   auto* dm = m_organizer->downloadManager();
   if (!dm) {
-    QMessageBox::warning(this, tr("Download All"),
-                         tr("MO2 download manager is not available."));
+    QMessageBox::warning(this, tr("Download All"), tr("MO2 download manager is not available."));
     return;
   }
 
   // Walk result rows, pick the FIRST (newest) file for each unique translation
   // mod ID — results are already sorted newest-first by addResultRows.
-  QSet<int>  seenModIds;
-  int        queued  = 0;
-  int        skipped = 0;
+  QSet<int> seenModIds;
+  int       queued  = 0;
+  int       skipped = 0;
 
   for (int row = 0; row < m_resultTable->rowCount(); ++row) {
     auto* item = m_resultTable->item(row, 0);
-    if (!item) continue;
+    if (!item)
+      continue;
 
     const int modId  = item->data(Qt::UserRole).toInt();
     const int fileId = item->data(Qt::UserRole + 1).toInt();
 
     if (modId <= 0 || fileId <= 0) {
       ++skipped;
-      continue;  // stub row (no API key) — can't download
+      continue; // stub row (no API key) — can't download
     }
 
     if (seenModIds.contains(modId)) {
@@ -585,17 +579,19 @@ void NexusTab::onDownloadAllClicked()
     if (id >= 0) {
       ++queued;
       LWizardLog::info(QStringLiteral("Download All: queued mod %1 file %2 (dl id %3)")
-                           .arg(modId).arg(fileId).arg(id));
+                           .arg(modId)
+                           .arg(fileId)
+                           .arg(id));
     } else {
       ++skipped;
-      LWizardLog::warn(QStringLiteral("Download All: failed to queue mod %1 file %2")
-                           .arg(modId).arg(fileId));
+      LWizardLog::warn(
+          QStringLiteral("Download All: failed to queue mod %1 file %2").arg(modId).arg(fileId));
     }
   }
 
-  m_statusLabel->setText(
-      tr("Download All: %1 file(s) queued, %2 skipped (stubs or errors).")
-          .arg(queued).arg(skipped));
+  m_statusLabel->setText(tr("Download All: %1 file(s) queued, %2 skipped (stubs or errors).")
+                             .arg(queued)
+                             .arg(skipped));
 }
 
 // ---------------------------------------------------------------------------
