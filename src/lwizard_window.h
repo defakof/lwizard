@@ -10,6 +10,8 @@ class LWizardNexusApi;
 class NexusTab;
 class QCheckBox;
 class QComboBox;
+class QLabel;
+class QProgressBar;
 class QPushButton;
 class QTextEdit;
 class TranslationTab;
@@ -42,6 +44,9 @@ private:
   QComboBox*      m_languageCombo         = nullptr;
   QCheckBox*      m_cacheOnlyCurrentLang  = nullptr;
   QPushButton*    m_scanBtn               = nullptr;
+  QPushButton*    m_clearCacheBtn         = nullptr;
+  QLabel*         m_scanStatus            = nullptr;
+  QProgressBar*   m_scanProgress          = nullptr;
   QPointer<QTextEdit> m_logView;
   TranslationTab*   m_translationTab      = nullptr;
   NexusTab*         m_nexusTab            = nullptr;
@@ -60,6 +65,8 @@ private slots:
   void saveSettings();
   void onCacheOnlyCurrentLangToggled(bool checked);
   void startScan();
+  void clearAllCaches();
+  void onScanProgress(int done, int total, const QString& currentMod);
   void onScanFinished();
   void onLogEntry(const QString& entry);
 };

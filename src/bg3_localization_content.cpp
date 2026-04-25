@@ -5,6 +5,7 @@
 #include <QCryptographicHash>
 #include <QDir>
 #include <QDirIterator>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -192,6 +193,31 @@ QString contentIdLabel(int contentId)
   }
 }
 
+class ScopedScanTimer
+{
+public:
+  explicit ScopedScanTimer(qint64* bucket) : m_bucket(bucket) { m_timer.start(); }
+  ~ScopedScanTimer()
+  {
+    if (m_bucket)
+      *m_bucket += m_timer.elapsed();
+  }
+
+private:
+  qint64*       m_bucket = nullptr;
+  QElapsedTimer m_timer;
+};
+
+QString normalizedPakEntry(QString entry)
+{
+  const int tab = entry.indexOf(QChar('\t'));
+  if (tab >= 0)
+    entry = entry.left(tab);
+  entry = entry.trimmed();
+  entry.replace(QChar('\\'), QChar('/'));
+  return entry;
+}
+
 }  // namespace
 
 BG3LocalizationContent::BG3LocalizationContent(MOBase::IOrganizer* organizer)
@@ -237,6 +263,40 @@ void BG3LocalizationContent::clearCache()
 {
   auto lock = QMutexLocker(&m_cacheMutex);
   m_cache.clear();
+}
+
+bool BG3LocalizationContent::clearAllCaches()
+{
+  {
+    auto lock = QMutexLocker(&m_autoScanMutex);
+    if (m_scanning.load() || m_autoScanRunning)
+      return false;
+    m_autoScanQueue.clear();
+    m_autoScanPending.clear();
+  }
+
+  {
+    auto lock = QMutexLocker(&m_cacheMutex);
+    m_cache.clear();
+  }
+
+  QJsonObject scanRoot;
+  scanRoot[QStringLiteral("v")]    = kCacheJsonVersion;
+  scanRoot[QStringLiteral("mods")] = QJsonObject{};
+  m_organizer->setPersistent(QStringLiteral("lwizard"), kPersistentKey(),
+                             QVariant(QJsonDocument(scanRoot).toJson(QJsonDocument::Compact)),
+                             true);
+
+  QJsonObject stringsRoot;
+  stringsRoot[QStringLiteral("v")]    = 1;
+  stringsRoot[QStringLiteral("mods")] = QJsonObject{};
+  m_organizer->setPersistent(QStringLiteral("lwizard"), kStringsPersistentKey(),
+                             QVariant(QJsonDocument(stringsRoot).toJson(QJsonDocument::Compact)),
+                             true);
+
+  LWizardLog::info(QStringLiteral("All LWizard localization scan caches cleared."));
+  emit contentCacheUpdated();
+  return true;
 }
 
 BG3LocalizationContent::CacheEntry
@@ -397,10 +457,14 @@ QString BG3LocalizationContent::localizationFingerprint(const QString& modAbsPat
   {
     QDir pakDir(modAbsPath + QStringLiteral("/PAK_FILES"));
     if (pakDir.exists()) {
-      const QFileInfoList paks =
-          pakDir.entryInfoList(QStringList{QStringLiteral("*.pak")}, QDir::Files);
-      for (const QFileInfo& fi : paks)
-        appendFile(QStringLiteral("PAK_FILES/") + fi.fileName(), fi);
+      QDirIterator it(pakDir.path(), QStringList{QStringLiteral("*.pak")}, QDir::Files,
+                      QDirIterator::Subdirectories);
+      while (it.hasNext()) {
+        it.next();
+        const QFileInfo fi  = it.fileInfo();
+        const QString rel   = pakDir.relativeFilePath(fi.absoluteFilePath());
+        appendFile(QStringLiteral("PAK_FILES/") + rel, fi);
+      }
     }
   }
 
@@ -657,6 +721,17 @@ void BG3LocalizationContent::filterModsJsonToSingleLanguage(QJsonObject& mods,
 
 void BG3LocalizationContent::savePersistentFromMemory()
 {
+  QHash<QString, CacheEntry> snapshot;
+  {
+    auto lock = QMutexLocker(&m_cacheMutex);
+    snapshot = m_cache;
+  }
+  savePersistentFromMemory(snapshot);
+}
+
+void BG3LocalizationContent::savePersistentFromMemory(
+    const QHash<QString, CacheEntry>& entries)
+{
   const QByteArray raw =
       variantToJsonBytes(m_organizer->persistent(QStringLiteral("lwizard"), kPersistentKey(),
                                                  QVariant()));
@@ -672,38 +747,35 @@ void BG3LocalizationContent::savePersistentFromMemory()
   root[QStringLiteral("v")] = kCacheJsonVersion;
   QJsonObject mods            = root[QStringLiteral("mods")].toObject();
 
-  {
-    auto lock = QMutexLocker(&m_cacheMutex);
-    for (auto it = m_cache.constBegin(); it != m_cache.constEnd(); ++it) {
-      if (it->contentId == CONTENT_NONE || it->fingerprint.isEmpty() ||
-          !it->relationshipsKnown)
-        continue;
+  for (auto it = entries.constBegin(); it != entries.constEnd(); ++it) {
+    if (it->contentId == CONTENT_NONE || it->fingerprint.isEmpty() ||
+        !it->relationshipsKnown)
+      continue;
 
-      const QString          modName    = it.key();
-      const QString          entryLang  = it->language;
-      MOBase::IModInterface* mod        = m_organizer->modList()->getMod(modName);
-      if (!mod)
-        continue;
+    const QString          modName    = it.key();
+    const QString          entryLang  = it->language;
+    MOBase::IModInterface* mod        = m_organizer->modList()->getMod(modName);
+    if (!mod)
+      continue;
 
-      QJsonObject modObj = mods[modName].toObject();
-      modObj[QStringLiteral("path")] = mod->absolutePath();
-      QJsonObject langs              = modObj[QStringLiteral("langs")].toObject();
-      QJsonObject le;
-      le[QStringLiteral("id")]         = it->contentId;
-      le[QStringLiteral("fp")]         = it->fingerprint;
-      le[QStringLiteral("linksKnown")] = true;
-      if (!it->translationTarget.isEmpty())
-        le[QStringLiteral("target")] = it->translationTarget;
-      if (!it->separateTranslations.isEmpty()) {
-        QJsonArray translations;
-        for (const QString& translation : it->separateTranslations)
-          translations.append(translation);
-        le[QStringLiteral("translations")] = translations;
-      }
-      langs[entryLang] = le;
-      modObj[QStringLiteral("langs")] = langs;
-      mods[modName]                     = modObj;
+    QJsonObject modObj = mods[modName].toObject();
+    modObj[QStringLiteral("path")] = mod->absolutePath();
+    QJsonObject langs              = modObj[QStringLiteral("langs")].toObject();
+    QJsonObject le;
+    le[QStringLiteral("id")]         = it->contentId;
+    le[QStringLiteral("fp")]         = it->fingerprint;
+    le[QStringLiteral("linksKnown")] = true;
+    if (!it->translationTarget.isEmpty())
+      le[QStringLiteral("target")] = it->translationTarget;
+    if (!it->separateTranslations.isEmpty()) {
+      QJsonArray translations;
+      for (const QString& translation : it->separateTranslations)
+        translations.append(translation);
+      le[QStringLiteral("translations")] = translations;
     }
+    langs[entryLang] = le;
+    modObj[QStringLiteral("langs")] = langs;
+    mods[modName]                     = modObj;
   }
 
   if (cacheOnlyCurrentLanguage())
@@ -829,6 +901,11 @@ bool BG3LocalizationContent::scanAll()
       QStringLiteral("Scan started — language: %1, mods: %2").arg(language).arg(mods.size()));
 
   auto* thread = QThread::create([this, language, mods]() {
+    QElapsedTimer totalTimer;
+    totalTimer.start();
+    ScanMetrics      metrics;
+    PakManifestCache pakManifestCache;
+
     int foundEmbedded    = 0;
     int foundTranslation = 0;
     int skipped          = 0;
@@ -838,13 +915,28 @@ bool BG3LocalizationContent::scanAll()
     QHash<QString, QString>        scanPath;
     QHash<QString, QString>        scanFp;
 
+    int done = 0;
     for (const QString& modName : mods) {
+      auto emitProgress = [&]() {
+        QMetaObject::invokeMethod(
+            this, [this, done, total = mods.size(), modName]() {
+              emit scanProgress(done, total, modName);
+            }, Qt::QueuedConnection);
+      };
+
       auto* mod = m_organizer->modList()->getMod(modName);
-      if (!mod)
+      if (!mod) {
+        ++done;
+        emitProgress();
         continue;
+      }
 
       const QString modPath = mod->absolutePath();
-      const QString fp      = localizationFingerprint(modPath);
+      QString fp;
+      {
+        ScopedScanTimer timer(&metrics.fingerprintMs);
+        fp = localizationFingerprint(modPath);
+      }
 
       {
         auto lock = QMutexLocker(&m_cacheMutex);
@@ -858,13 +950,18 @@ bool BG3LocalizationContent::scanAll()
             ++foundTranslation;
           ++skipped;
           LWizardLog::debug(QStringLiteral("  [cache hit] ") + modName);
+          ++done;
+          emitProgress();
           continue;
         }
       }
 
       auto tree = mod->fileTree();
-      if (!tree)
+      if (!tree) {
+        ++done;
+        emitProgress();
         continue;
+      }
 
       QStringList topEntries;
       for (const auto& e : *tree)
@@ -873,7 +970,11 @@ bool BG3LocalizationContent::scanAll()
           QStringLiteral("  [%1] top entries: ").arg(modName) +
           topEntries.join(QStringLiteral(", ")));
 
-      const int baseId = detectContentId(tree, language);
+      int baseId = CONTENT_NONE;
+      {
+        ScopedScanTimer timer(&metrics.detectMs);
+        baseId = detectContentId(tree, language, &pakManifestCache, &metrics);
+      }
 
       scanBaseId[modName] = baseId;
       scanPath[modName]   = modPath;
@@ -882,12 +983,17 @@ bool BG3LocalizationContent::scanAll()
       // Always union UUIDs from every language present on disk / in paks. The scan
       // language only affects detectContentId (embedded vs unavailable for *this* lang);
       // translation-mod matching needs cross-language handles (e.g. English base vs RUS).
-      scanUuids[modName] = uuidKeysUnionAllLanguages(modPath);
+      {
+        ScopedScanTimer timer(&metrics.uuidMs);
+        scanUuids[modName] = uuidKeysUnionAllLanguages(modPath, &pakManifestCache, &metrics);
+      }
       if (scanUuids[modName].isEmpty())
         scanBaseId[modName] = CONTENT_NONE;
       LWizardLog::debug(QStringLiteral("  [%1] UUID keys (all languages): %2")
                             .arg(modName)
                             .arg(scanUuids[modName].size()));
+      ++done;
+      emitProgress();
     }
 
     const QList<QString> rescanned = scanBaseId.keys();
@@ -895,13 +1001,28 @@ bool BG3LocalizationContent::scanAll()
     QHash<QString, int> finalIds;
     QHash<QString, QString> translationCandToRef;
 
-    for (const QString& modName : rescanned) {
-      const int                     baseId = scanBaseId[modName];
-      const QPair<int, QString> pr =
-          applyTranslationModClassification(modName, baseId, mods, scanBaseId, scanUuids);
-      finalIds[modName] = pr.first;
-      if (pr.first == CONTENT_TRANSLATION_MOD && !pr.second.isEmpty())
-        translationCandToRef[modName] = pr.second;
+    {
+      ScopedScanTimer timer(&metrics.matchMs);
+      const QHash<QString, QSet<QString>> persistentUuidsByMod = preloadPersistentUuidKeys();
+      QHash<QString, QStringList> uuidIndexByUuid;
+      for (const QString& indexedModName : mods) {
+        QSet<QString> uuids = scanUuids.value(indexedModName);
+        uuids |= persistentUuidsByMod.value(indexedModName);
+        if (uuids.size() < kMinUuidsTranslation)
+          continue;
+        for (const QString& uuid : uuids)
+          uuidIndexByUuid[uuid].append(indexedModName);
+      }
+
+      for (const QString& modName : rescanned) {
+        const int                     baseId = scanBaseId[modName];
+        const QPair<int, QString> pr =
+            applyTranslationModClassification(modName, baseId, mods, scanBaseId, scanUuids,
+                                              persistentUuidsByMod, uuidIndexByUuid);
+        finalIds[modName] = pr.first;
+        if (pr.first == CONTENT_TRANSLATION_MOD && !pr.second.isEmpty())
+          translationCandToRef[modName] = pr.second;
+      }
     }
 
     QHash<QString, QStringList> baseToTranslations;
@@ -925,6 +1046,8 @@ bool BG3LocalizationContent::scanAll()
     }
 
     int foundInstalled = 0;
+    QHash<QString, QByteArray> embeddedStringsByMod;
+    QHash<QString, CacheEntry> updatedEntries;
     for (const QString& modName : rescanned) {
       const int finalId = finalIds[modName];
       CacheEntry entry;
@@ -935,26 +1058,14 @@ bool BG3LocalizationContent::scanAll()
       entry.separateTranslations = baseToTranslations.value(modName);
       entry.relationshipsKnown  = true;
 
-      {
-        auto lock        = QMutexLocker(&m_cacheMutex);
-        m_cache[modName] = entry;
-      }
+      updatedEntries.insert(modName, entry);
 
       if (finalId == CONTENT_EMBEDDED) {
+        ScopedScanTimer timer(&metrics.uuidMs);
         const QByteArray compressed =
-            buildEmbeddedStringsForMod(scanPath[modName], language);
-        if (!compressed.isEmpty()) {
-          const QString modNameCopy = modName;
-          const QString langCopy    = language;
-          const QString fpCopy      = scanFp[modName];
-          const QString pathCopy    = scanPath[modName];
-          QMetaObject::invokeMethod(
-              this,
-              [this, modNameCopy, langCopy, pathCopy, fpCopy, compressed]() {
-                saveEmbeddedStringsBlob(modNameCopy, langCopy, pathCopy, fpCopy, compressed);
-              },
-              Qt::QueuedConnection);
-        }
+            buildEmbeddedStringsForMod(scanPath[modName], language, &pakManifestCache, &metrics);
+        if (!compressed.isEmpty())
+          embeddedStringsByMod.insert(modName, compressed);
       }
 
       if (finalId == CONTENT_EMBEDDED) {
@@ -979,8 +1090,12 @@ bool BG3LocalizationContent::scanAll()
       }
     }
 
+    QHash<QString, CacheEntry> persistentSnapshot;
     {
       auto lock = QMutexLocker(&m_cacheMutex);
+      for (auto it = updatedEntries.constBegin(); it != updatedEntries.constEnd(); ++it)
+        m_cache[it.key()] = it.value();
+
       for (auto it = baseToTranslations.constBegin(); it != baseToTranslations.constEnd(); ++it) {
         if (scanBaseId.contains(it.key()))
           continue;
@@ -994,6 +1109,7 @@ bool BG3LocalizationContent::scanAll()
         if (cachedBase->contentId == CONTENT_UNAVAILABLE)
           cachedBase->contentId = CONTENT_INSTALLED;
       }
+      persistentSnapshot = m_cache;
     }
 
     LWizardLog::info(
@@ -1005,10 +1121,33 @@ bool BG3LocalizationContent::scanAll()
             .arg(skipped)
             .arg(language));
 
+    const qint64 totalMs = totalTimer.elapsed();
+
     QMetaObject::invokeMethod(
         this,
-        [this]() {
-          savePersistentFromMemory();
+        [this, language, foundEmbedded, foundTranslation, foundInstalled, skipped,
+         embeddedStringsByMod, scanPath, scanFp, persistentSnapshot, metrics, totalMs]() mutable {
+          QElapsedTimer persistTimer;
+          persistTimer.start();
+          saveEmbeddedStringsBlobs(embeddedStringsByMod, scanPath, scanFp, language);
+          savePersistentFromMemory(persistentSnapshot);
+          metrics.persistMs = persistTimer.elapsed();
+          LWizardLog::info(
+              QStringLiteral("Scan timings — total: %1 ms, fingerprint: %2 ms, detect: %3 ms, "
+                             "uuid/string: %4 ms, match: %5 ms, persist: %6 ms")
+                  .arg(totalMs)
+                  .arg(metrics.fingerprintMs)
+                  .arg(metrics.detectMs)
+                  .arg(metrics.uuidMs)
+                  .arg(metrics.matchMs)
+                  .arg(metrics.persistMs));
+          LWizardLog::info(
+              QStringLiteral("Divine spawns — list-package: %1, extract-package: %2, "
+                             "extract-single-file: %3, convert-loca: %4")
+                  .arg(metrics.listPackageSpawns)
+                  .arg(metrics.extractPackageSpawns)
+                  .arg(metrics.extractSingleSpawns)
+                  .arg(metrics.convertLocaSpawns));
           m_scanning.store(false);
           emit contentCacheUpdated();
           emit scanFinished();
@@ -1074,8 +1213,10 @@ BG3LocalizationContent::SingleModScanResult BG3LocalizationContent::computeSingl
     return result;
   }
 
-  result.baseContentId = detectContentId(tree, language);
-  result.uuidKeys      = uuidKeysUnionAllLanguages(result.modPath);
+  PakManifestCache pakManifestCache;
+  ScanMetrics      metrics;
+  result.baseContentId = detectContentId(tree, language, &pakManifestCache, &metrics);
+  result.uuidKeys      = uuidKeysUnionAllLanguages(result.modPath, &pakManifestCache, &metrics);
   if (result.uuidKeys.isEmpty()) {
     result.baseContentId  = CONTENT_NONE;
     result.finalContentId = CONTENT_NONE;
@@ -1089,12 +1230,13 @@ BG3LocalizationContent::SingleModScanResult BG3LocalizationContent::computeSingl
 
   const QPair<int, QString> classification =
       applyTranslationModClassification(modName, result.baseContentId, validModNames(),
-                                        scanBaseId, scanUuids);
+                                        scanBaseId, scanUuids, preloadPersistentUuidKeys());
   result.finalContentId    = classification.first;
   result.translationTarget = classification.second;
 
   if (result.finalContentId == CONTENT_EMBEDDED)
-    result.embeddedStrings = buildEmbeddedStringsForMod(result.modPath, language);
+    result.embeddedStrings = buildEmbeddedStringsForMod(result.modPath, language,
+                                                        &pakManifestCache, &metrics);
 
   return result;
 }
@@ -1256,44 +1398,23 @@ QString BG3LocalizationContent::resolvedDivinePath() const
 }
 
 bool BG3LocalizationContent::pakHasLocalization(const QString& pakPath,
-                                                 const QString& language) const
+                                                 const QString& language,
+                                                 PakManifestCache* pakManifestCache,
+                                                 ScanMetrics* metrics) const
 {
-  const QString divine = resolvedDivinePath();
-  if (divine.isEmpty())
-    return false;
-
-  QProcess proc;
-  proc.start(divine,
-             {QStringLiteral("-g"), QStringLiteral("bg3"),
-              QStringLiteral("-a"), QStringLiteral("list-package"),
-              QStringLiteral("-s"), pakPath});
-
   LWizardLog::debug(QStringLiteral("  divine scanning: ") + pakPath);
 
-  if (!proc.waitForStarted(5000) || !proc.waitForFinished(30000)) {
-    proc.kill();
-    LWizardLog::warn(QStringLiteral("Divine.exe timed out scanning ") + pakPath);
-    return false;
-  }
-
-  const int     code   = proc.exitCode();
-  const QString output = QString::fromUtf8(proc.readAllStandardOutput());
-  const QString errout = QString::fromUtf8(proc.readAllStandardError());
-
-  LWizardLog::debug(QStringLiteral("  exit=%1 stdout=%2 stderr=%3")
-                        .arg(code)
-                        .arg(output.left(200))
-                        .arg(errout.left(200)));
-
-  if (code != 0)
-    return false;
-
   const QString needle = QStringLiteral("Localization/") + language + QStringLiteral("/");
-  return output.contains(needle, Qt::CaseInsensitive);
+  for (const QString& entry : listPakFileEntries(pakPath, pakManifestCache, metrics)) {
+    if (entry.contains(needle, Qt::CaseInsensitive))
+      return true;
+  }
+  return false;
 }
 
 int BG3LocalizationContent::detectContentId(
-    std::shared_ptr<const MOBase::IFileTree> tree, const QString& language) const
+    std::shared_ptr<const MOBase::IFileTree> tree, const QString& language,
+    PakManifestCache* pakManifestCache, ScanMetrics* metrics) const
 {
   auto* mod = m_organizer->modList()->getMod(tree->name());
   if (mod && mod->isSeparator())
@@ -1321,28 +1442,14 @@ int BG3LocalizationContent::detectContentId(
   // 2. Scan .pak files for embedded localization
   if (mod) {
     const QString modPath = mod->absolutePath();
+    QStringList paks;
+    collectPakPathsUnderMod(modPath, &paks);
+    for (const QString& pakPath : paks) {
+      if (pakHasLocalization(pakPath, language, pakManifestCache, metrics))
+        return CONTENT_EMBEDDED;
+    }
 
-    auto scanPaksInDir = [&](std::shared_ptr<const MOBase::IFileTree> dir,
-                             const QString& relDir) -> bool {
-      if (!dir)
-        return false;
-      for (const auto& entry : *dir) {
-        if (entry->isFile() && entry->hasSuffix(QStringLiteral("pak"))) {
-          const QString pakPath = modPath + QStringLiteral("/") + relDir + entry->name();
-          if (pakHasLocalization(pakPath, language))
-            return true;
-        }
-      }
-      return false;
-    };
-
-    if (scanPaksInDir(tree->findDirectory(QStringLiteral("PAK_FILES")), QStringLiteral("PAK_FILES/")))
-      return CONTENT_EMBEDDED;
-
-    if (scanPaksInDir(tree, QStringLiteral("")))
-      return CONTENT_EMBEDDED;
-
-    if (discoverLanguagesInMod(modPath).isEmpty())
+    if (discoverLanguagesInMod(modPath, pakManifestCache, metrics).isEmpty())
       return CONTENT_NONE;
   }
 
@@ -1370,7 +1477,8 @@ QSet<QString> BG3LocalizationContent::uuidKeysFromCompressed(const QByteArray& c
   return out;
 }
 
-QSet<QString> BG3LocalizationContent::discoverLanguagesInMod(const QString& modAbsPath) const
+QSet<QString> BG3LocalizationContent::discoverLanguagesInMod(
+    const QString& modAbsPath, PakManifestCache* pakManifestCache, ScanMetrics* metrics) const
 {
   QSet<QString> langs;
 
@@ -1401,10 +1509,9 @@ QSet<QString> BG3LocalizationContent::discoverLanguagesInMod(const QString& modA
       QStringLiteral(R"(Localization[/\\]([^/\\]+)[/\\])"),
       QRegularExpression::CaseInsensitiveOption);
   for (const QString& pakPath : paks) {
-    const QStringList pakLines = listPakFileEntries(pakPath);
+    const QStringList pakLines = listPakFileEntries(pakPath, pakManifestCache, metrics);
     for (const QString& line : pakLines) {
-      QString n = line;
-      n.replace(QChar('\\'), QChar('/'));
+      const QString n = normalizedPakEntry(line);
       const QRegularExpressionMatch m = re.match(n);
       if (m.hasMatch())
         langs.insert(m.captured(1));
@@ -1414,12 +1521,13 @@ QSet<QString> BG3LocalizationContent::discoverLanguagesInMod(const QString& modA
   return langs;
 }
 
-QSet<QString> BG3LocalizationContent::uuidKeysUnionAllLanguages(const QString& modAbsPath) const
+QSet<QString> BG3LocalizationContent::uuidKeysUnionAllLanguages(
+    const QString& modAbsPath, PakManifestCache* pakManifestCache, ScanMetrics* metrics) const
 {
-  const QSet<QString> langs = discoverLanguagesInMod(modAbsPath);
+  const QSet<QString> langs = discoverLanguagesInMod(modAbsPath, pakManifestCache, metrics);
   QSet<QString>       out;
   for (const QString& lang : langs) {
-    const QByteArray c = buildEmbeddedStringsForMod(modAbsPath, lang);
+    const QByteArray c = buildEmbeddedStringsForMod(modAbsPath, lang, pakManifestCache, metrics);
     out |= uuidKeysFromCompressed(c);
   }
   return out;
@@ -1453,12 +1561,45 @@ QSet<QString> BG3LocalizationContent::embeddedUuidKeysUnionFromPersistent(
   return out;
 }
 
+QHash<QString, QSet<QString>> BG3LocalizationContent::preloadPersistentUuidKeys() const
+{
+  QHash<QString, QSet<QString>> out;
+  const QByteArray raw =
+      variantToJsonBytes(m_organizer->persistent(QStringLiteral("lwizard"),
+                                                 kStringsPersistentKey(), QVariant()));
+  if (raw.isEmpty())
+    return out;
+
+  QJsonParseError err;
+  const QJsonDocument doc = QJsonDocument::fromJson(raw, &err);
+  if (err.error != QJsonParseError::NoError || !doc.isObject())
+    return out;
+
+  const QJsonObject mods = doc.object()[QStringLiteral("mods")].toObject();
+  for (auto modIt = mods.constBegin(); modIt != mods.constEnd(); ++modIt) {
+    QSet<QString> modUuids;
+    const QJsonObject langs = modIt->toObject()[QStringLiteral("langs")].toObject();
+    for (auto langIt = langs.constBegin(); langIt != langs.constEnd(); ++langIt) {
+      const QString b64 = langIt->toObject()[QStringLiteral("data")].toString();
+      if (b64.isEmpty())
+        continue;
+      modUuids |= uuidKeysFromCompressed(QByteArray::fromBase64(b64.toUtf8()));
+    }
+    if (!modUuids.isEmpty())
+      out.insert(modIt.key(), modUuids);
+  }
+
+  return out;
+}
+
 QPair<int, QString> BG3LocalizationContent::applyTranslationModClassification(
     const QString& modName,
     int             baseContentId,
     const QStringList& allModNames,
     const QHash<QString, int>&            baseIdThisScan,
-    const QHash<QString, QSet<QString>>& uuidsThisScan) const
+    const QHash<QString, QSet<QString>>& uuidsThisScan,
+    const QHash<QString, QSet<QString>>& persistentUuidsByMod,
+    const QHash<QString, QStringList>& uuidIndexByUuid) const
 {
   const QSet<QString> candUuids = uuidsThisScan.value(modName);
 
@@ -1474,13 +1615,36 @@ QPair<int, QString> BG3LocalizationContent::applyTranslationModClassification(
 
   auto mergedRefUuids = [&](const QString& refName) -> QSet<QString> {
     QSet<QString> u = uuidsThisScan.value(refName);
-    u |= embeddedUuidKeysUnionFromPersistent(refName);
+    u |= persistentUuidsByMod.value(refName);
     return u;
   };
 
   if (candUuids.size() >= kMinUuidsTranslation) {
+    QHash<QString, int> overlapByRef;
+    if (!uuidIndexByUuid.isEmpty()) {
+      for (const QString& uuid : candUuids) {
+        for (const QString& refName : uuidIndexByUuid.value(uuid)) {
+          if (refName != modName)
+            ++overlapByRef[refName];
+        }
+      }
+    } else {
+      for (const QString& refName : allModNames) {
+        if (refName == modName)
+          continue;
+        const QSet<QString> refUuids = mergedRefUuids(refName);
+        for (const QString& uuid : candUuids) {
+          if (refUuids.contains(uuid))
+            ++overlapByRef[refName];
+        }
+      }
+    }
+
     for (const QString& refName : allModNames) {
       if (refName == modName)
+        continue;
+      const int inter = overlapByRef.value(refName, 0);
+      if (inter <= 0)
         continue;
 
       const int refBase = resolveRefBase(refName);
@@ -1499,11 +1663,6 @@ QPair<int, QString> BG3LocalizationContent::applyTranslationModClassification(
       if (candUuids.size() == refUuids.size() && modName.length() <= refName.length())
         continue;
 
-      int inter = 0;
-      for (const QString& u : candUuids) {
-        if (refUuids.contains(u))
-          ++inter;
-      }
       if (inter < kMinOverlapAbs)
         continue;
 
@@ -1598,6 +1757,59 @@ void BG3LocalizationContent::saveEmbeddedStringsBlob(const QString& modName, con
                              QVariant(QJsonDocument(root).toJson(QJsonDocument::Compact)), true);
 }
 
+void BG3LocalizationContent::saveEmbeddedStringsBlobs(
+    const QHash<QString, QByteArray>& compressedJsonByMod,
+    const QHash<QString, QString>& modPathByMod,
+    const QHash<QString, QString>& fingerprintByMod,
+    const QString& lang)
+{
+  if (compressedJsonByMod.isEmpty())
+    return;
+
+  const QByteArray raw =
+      variantToJsonBytes(m_organizer->persistent(QStringLiteral("lwizard"),
+                                                 kStringsPersistentKey(), QVariant()));
+  QJsonObject root;
+  if (!raw.isEmpty()) {
+    QJsonParseError err;
+    const QJsonDocument existing = QJsonDocument::fromJson(raw, &err);
+    if (err.error == QJsonParseError::NoError && existing.isObject())
+      root = existing.object();
+  }
+
+  root[QStringLiteral("v")] = 1;
+  QJsonObject mods          = root[QStringLiteral("mods")].toObject();
+
+  for (auto it = compressedJsonByMod.constBegin(); it != compressedJsonByMod.constEnd(); ++it) {
+    if (it.value().isEmpty())
+      continue;
+
+    const QString modName     = it.key();
+    const QString modPath     = modPathByMod.value(modName);
+    const QString fingerprint = fingerprintByMod.value(modName);
+    if (modPath.isEmpty() || fingerprint.isEmpty())
+      continue;
+
+    QJsonObject modObj        = mods[modName].toObject();
+    modObj[QStringLiteral("path")] = modPath;
+    QJsonObject langs              = modObj[QStringLiteral("langs")].toObject();
+
+    QJsonObject le;
+    le[QStringLiteral("fp")]   = fingerprint;
+    le[QStringLiteral("data")] = QString::fromUtf8(it.value().toBase64());
+    langs[lang]                = le;
+    modObj[QStringLiteral("langs")] = langs;
+    mods[modName]                    = modObj;
+  }
+
+  if (cacheOnlyCurrentLanguage())
+    filterModsJsonToSingleLanguage(mods, lang);
+
+  root[QStringLiteral("mods")] = mods;
+  m_organizer->setPersistent(QStringLiteral("lwizard"), kStringsPersistentKey(),
+                             QVariant(QJsonDocument(root).toJson(QJsonDocument::Compact)), true);
+}
+
 QMap<QString, QString>
 BG3LocalizationContent::parseEmbeddedStringsCompressedJson(const QByteArray& compressedJson) const
 {
@@ -1662,7 +1874,8 @@ QMap<QString, QString> BG3LocalizationContent::embeddedStringsFor(const QString&
   return parseEmbeddedStringsCompressedJson(blob);
 }
 
-QByteArray BG3LocalizationContent::locaFileToJsonMapCompressed(const QString& locaAbsPath) const
+QByteArray BG3LocalizationContent::locaFileToJsonMapCompressed(const QString& locaAbsPath,
+                                                               ScanMetrics* metrics) const
 {
   const QString divine = resolvedDivinePath();
   if (divine.isEmpty())
@@ -1673,6 +1886,9 @@ QByteArray BG3LocalizationContent::locaFileToJsonMapCompressed(const QString& lo
     return {};
 
   const QString xmlPath = tmp.path() + QStringLiteral("/out.xml");
+  if (metrics)
+    ++metrics->convertLocaSpawns;
+
   QProcess proc;
   proc.start(divine,
              {QStringLiteral("-g"), QStringLiteral("bg3"),
@@ -1755,11 +1971,22 @@ void BG3LocalizationContent::collectPakPathsUnderMod(const QString& modAbsPath,
   }
 }
 
-QStringList BG3LocalizationContent::listPakFileEntries(const QString& pakPath) const
+QStringList BG3LocalizationContent::listPakFileEntries(const QString& pakPath,
+                                                       PakManifestCache* pakManifestCache,
+                                                       ScanMetrics* metrics) const
 {
+  if (pakManifestCache) {
+    auto it = pakManifestCache->entriesByPakPath.constFind(pakPath);
+    if (it != pakManifestCache->entriesByPakPath.constEnd())
+      return it.value();
+  }
+
   const QString divine = resolvedDivinePath();
   if (divine.isEmpty())
     return {};
+
+  if (metrics)
+    ++metrics->listPackageSpawns;
 
   QProcess proc;
   proc.start(divine,
@@ -1780,22 +2007,62 @@ QStringList BG3LocalizationContent::listPakFileEntries(const QString& pakPath) c
   const QString output = QString::fromUtf8(proc.readAllStandardOutput());
   const QStringList lines = output.split(QChar('\n'), Qt::SkipEmptyParts);
   for (const QString& line : lines) {
-    const int tab = line.indexOf(QChar('\t'));
-    const QString name =
-        (tab < 0 ? line.trimmed() : line.left(tab).trimmed());
+    const QString name = normalizedPakEntry(line);
     if (!name.isEmpty())
       out.append(name);
   }
+  if (pakManifestCache)
+    pakManifestCache->entriesByPakPath.insert(pakPath, out);
   return out;
 }
 
-bool BG3LocalizationContent::extractPakEntryToFile(const QString& pakPath,
-                                                   const QString& packagedPath,
-                                                   const QString& destAbsFile) const
+bool BG3LocalizationContent::extractPakLocalizationsToDir(const QString& pakPath,
+                                                          const QString& destDir,
+                                                          ScanMetrics* metrics) const
 {
   const QString divine = resolvedDivinePath();
   if (divine.isEmpty())
     return false;
+
+  if (metrics)
+    ++metrics->extractPackageSpawns;
+
+  QProcess proc;
+  proc.start(divine,
+             {QStringLiteral("-g"), QStringLiteral("bg3"),
+              QStringLiteral("-a"), QStringLiteral("extract-package"),
+              QStringLiteral("-s"), pakPath,
+              QStringLiteral("-d"), destDir,
+              QStringLiteral("-x"), QStringLiteral(R"(Localization[/\\].*\.(loca|xml)$)"),
+              QStringLiteral("--use-regex")});
+
+  if (!proc.waitForStarted(5000) || !proc.waitForFinished(120000)) {
+    proc.kill();
+    LWizardLog::debug(QStringLiteral("  extract-package timed out: ") + pakPath);
+    return false;
+  }
+
+  if (proc.exitCode() != 0) {
+    LWizardLog::debug(QStringLiteral("  extract-package failed (code %1): %2")
+                          .arg(proc.exitCode())
+                          .arg(pakPath));
+    return false;
+  }
+
+  return true;
+}
+
+bool BG3LocalizationContent::extractPakEntryToFile(const QString& pakPath,
+                                                   const QString& packagedPath,
+                                                   const QString& destAbsFile,
+                                                   ScanMetrics* metrics) const
+{
+  const QString divine = resolvedDivinePath();
+  if (divine.isEmpty())
+    return false;
+
+  if (metrics)
+    ++metrics->extractSingleSpawns;
 
   QProcess proc;
   proc.start(divine,
@@ -1823,7 +2090,9 @@ bool BG3LocalizationContent::extractPakEntryToFile(const QString& pakPath,
 }
 
 QByteArray BG3LocalizationContent::buildEmbeddedStringsForMod(const QString& modAbsPath,
-                                                              const QString& lang) const
+                                                              const QString& lang,
+                                                              PakManifestCache* pakManifestCache,
+                                                              ScanMetrics* metrics) const
 {
   const QString divine = resolvedDivinePath();
   if (divine.isEmpty())
@@ -1839,7 +2108,7 @@ QByteArray BG3LocalizationContent::buildEmbeddedStringsForMod(const QString& mod
                     QDir::Files, QDirIterator::Subdirectories);
     while (it.hasNext()) {
       it.next();
-      const QByteArray one = locaFileToJsonMapCompressed(it.filePath());
+      const QByteArray one = locaFileToJsonMapCompressed(it.filePath(), metrics);
       if (!one.isEmpty())
         parts.append(one);
     }
@@ -1880,7 +2149,7 @@ QByteArray BG3LocalizationContent::buildEmbeddedStringsForMod(const QString& mod
     }
   }
 
-  // .loca inside .pak: list entries, extract matching Localization/<lang>/*.loca, convert.
+  // .loca/.xml inside .pak: extract localization files once per pak, then filter locally.
   QStringList paks;
   collectPakPathsUnderMod(modAbsPath, &paks);
   const QString locNeedle = QStringLiteral("Localization/") + lang + QStringLiteral("/");
@@ -1888,12 +2157,59 @@ QByteArray BG3LocalizationContent::buildEmbeddedStringsForMod(const QString& mod
   QTemporaryDir pakTmp;
   if (pakTmp.isValid()) {
     for (const QString& pakPath : paks) {
-      const QStringList entries = listPakFileEntries(pakPath);
+      const QStringList entries = listPakFileEntries(pakPath, pakManifestCache, metrics);
+      bool hasWantedEntry = false;
       for (const QString& entry : entries) {
-        QString norm = entry;
-        norm.replace(QChar('\\'), QChar('/'));
+        const QString norm = normalizedPakEntry(entry);
         if (!norm.contains(locNeedle, Qt::CaseInsensitive))
           continue;
+        const bool isLoca = norm.endsWith(QStringLiteral(".loca"), Qt::CaseInsensitive);
+        const bool isXml  = norm.endsWith(QStringLiteral(".xml"), Qt::CaseInsensitive);
+        if (isLoca || isXml) {
+          hasWantedEntry = true;
+          break;
+        }
+      }
+      if (!hasWantedEntry)
+        continue;
+
+      QString pakDest;
+      bool    extracted = false;
+      if (pakManifestCache) {
+        auto extractedIt =
+            pakManifestCache->localizationExtractDirsByPakPath.constFind(pakPath);
+        if (extractedIt != pakManifestCache->localizationExtractDirsByPakPath.constEnd() &&
+            extractedIt.value() && extractedIt.value()->isValid()) {
+          pakDest   = extractedIt.value()->path();
+          extracted = true;
+        } else {
+          auto tmp = std::make_shared<QTemporaryDir>();
+          if (tmp->isValid() && extractPakLocalizationsToDir(pakPath, tmp->path(), metrics)) {
+            pakDest   = tmp->path();
+            extracted = true;
+            pakManifestCache->localizationExtractDirsByPakPath.insert(pakPath, tmp);
+          }
+        }
+      } else {
+        pakDest =
+            pakTmp.path() + QChar('/') +
+            QString::fromLatin1(
+                QCryptographicHash::hash(pakPath.toUtf8(), QCryptographicHash::Sha256).toHex());
+        QDir().mkpath(pakDest);
+        extracted = extractPakLocalizationsToDir(pakPath, pakDest, metrics);
+      }
+
+      if (extracted) {
+        scanLocaUnder(pakDest + QStringLiteral("/Localization/") + lang);
+        scanXmlUnder(pakDest + QStringLiteral("/Localization/") + lang);
+        continue;
+      }
+
+      for (const QString& entry : entries) {
+        const QString norm = normalizedPakEntry(entry);
+        if (!norm.contains(locNeedle, Qt::CaseInsensitive))
+          continue;
+
         const bool isLoca = norm.endsWith(QStringLiteral(".loca"), Qt::CaseInsensitive);
         const bool isXml  = norm.endsWith(QStringLiteral(".xml"), Qt::CaseInsensitive);
         if (!isLoca && !isXml)
@@ -1904,10 +2220,11 @@ QByteArray BG3LocalizationContent::buildEmbeddedStringsForMod(const QString& mod
             QString::fromLatin1(
                 QCryptographicHash::hash(entry.toUtf8(), QCryptographicHash::Sha256).toHex()) +
             (isLoca ? QStringLiteral(".loca") : QStringLiteral(".xml"));
-        if (!extractPakEntryToFile(pakPath, entry, dest))
+        if (!extractPakEntryToFile(pakPath, entry, dest, metrics))
           continue;
         const QByteArray one =
-            isLoca ? locaFileToJsonMapCompressed(dest) : localizationXmlFileToJsonMapCompressed(dest);
+            isLoca ? locaFileToJsonMapCompressed(dest, metrics) :
+                     localizationXmlFileToJsonMapCompressed(dest);
         if (!one.isEmpty())
           parts.append(one);
         QFile::remove(dest);

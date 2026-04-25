@@ -14,6 +14,7 @@
 #include <QSet>
 #include <QString>
 #include <QStringList>
+#include <QTemporaryDir>
 
 #include <uibase/game_features/moddatacontent.h>
 
@@ -60,6 +61,9 @@ public:
    * Prefer hydrateMemoryFromPersistent() after language change.
    */
   void clearCache();
+
+  /** Clear all localization scan caches from memory and MO2 persistent storage. */
+  bool clearAllCaches();
 
   /** Load memory cache from MO2 persistent storage for the current language. */
   void hydrateMemoryFromPersistent();
@@ -127,11 +131,31 @@ public:
 
 signals:
   void contentCacheUpdated();
+  void scanProgress(int done, int total, const QString& currentMod);
   void scanFinished();
 
 private:
   MOBase::IOrganizer* m_organizer;
   std::atomic<bool>   m_scanning{false};
+
+  struct ScanMetrics
+  {
+    qint64 fingerprintMs = 0;
+    qint64 detectMs      = 0;
+    qint64 uuidMs        = 0;
+    qint64 matchMs       = 0;
+    qint64 persistMs     = 0;
+    int listPackageSpawns      = 0;
+    int extractPackageSpawns   = 0;
+    int extractSingleSpawns    = 0;
+    int convertLocaSpawns      = 0;
+  };
+
+  struct PakManifestCache
+  {
+    QHash<QString, QStringList> entriesByPakPath;
+    QHash<QString, std::shared_ptr<QTemporaryDir>> localizationExtractDirsByPakPath;
+  };
 
   struct SingleModScanResult
   {
@@ -180,10 +204,14 @@ private:
 
   /** Returns CONTENT_EMBEDDED if localization is found, CONTENT_UNAVAILABLE otherwise. */
   int  detectContentId(std::shared_ptr<const MOBase::IFileTree> tree,
-                       const QString& language) const;
-  bool pakHasLocalization(const QString& pakPath, const QString& language) const;
+                       const QString& language, PakManifestCache* pakManifestCache = nullptr,
+                       ScanMetrics* metrics = nullptr) const;
+  bool pakHasLocalization(const QString& pakPath, const QString& language,
+                          PakManifestCache* pakManifestCache = nullptr,
+                          ScanMetrics* metrics = nullptr) const;
 
   void    savePersistentFromMemory();
+  void    savePersistentFromMemory(const QHash<QString, CacheEntry>& entries);
   void    filterModsJsonToSingleLanguage(QJsonObject& mods, const QString& keepLang) const;
   QString localizationFingerprint(const QString& modAbsPath) const;
 
@@ -192,20 +220,38 @@ private:
   void       saveEmbeddedStringsBlob(const QString& modName, const QString& lang,
                                      const QString& modPath, const QString& fingerprint,
                                      const QByteArray& compressedJson);
+  void       saveEmbeddedStringsBlobs(
+            const QHash<QString, QByteArray>& compressedJsonByMod,
+            const QHash<QString, QString>& modPathByMod,
+            const QHash<QString, QString>& fingerprintByMod,
+            const QString& lang);
   QMap<QString, QString> parseEmbeddedStringsCompressedJson(const QByteArray& compressedJson) const;
 
-  QByteArray buildEmbeddedStringsForMod(const QString& modAbsPath, const QString& lang) const;
-  QByteArray locaFileToJsonMapCompressed(const QString& locaAbsPath) const;
+  QByteArray buildEmbeddedStringsForMod(const QString& modAbsPath, const QString& lang,
+                                        PakManifestCache* pakManifestCache = nullptr,
+                                        ScanMetrics* metrics = nullptr) const;
+  QByteArray locaFileToJsonMapCompressed(const QString& locaAbsPath,
+                                         ScanMetrics* metrics = nullptr) const;
   QByteArray mergeJsonMapsCompressed(const QList<QByteArray>& compressedJsonMaps) const;
 
-  QStringList listPakFileEntries(const QString& pakPath) const;
+  QStringList listPakFileEntries(const QString& pakPath,
+                                 PakManifestCache* pakManifestCache = nullptr,
+                                 ScanMetrics* metrics = nullptr) const;
+  bool        extractPakLocalizationsToDir(const QString& pakPath, const QString& destDir,
+                                           ScanMetrics* metrics = nullptr) const;
   bool        extractPakEntryToFile(const QString& pakPath, const QString& packagedPath,
-                                   const QString& destAbsFile) const;
+                                   const QString& destAbsFile,
+                                   ScanMetrics* metrics = nullptr) const;
   void        collectPakPathsUnderMod(const QString& modAbsPath, QStringList* outPaks) const;
 
   QSet<QString> uuidKeysFromCompressed(const QByteArray& compressedJson) const;
-  QSet<QString> discoverLanguagesInMod(const QString& modAbsPath) const;
-  QSet<QString> uuidKeysUnionAllLanguages(const QString& modAbsPath) const;
+  QHash<QString, QSet<QString>> preloadPersistentUuidKeys() const;
+  QSet<QString> discoverLanguagesInMod(const QString& modAbsPath,
+                                       PakManifestCache* pakManifestCache = nullptr,
+                                       ScanMetrics* metrics = nullptr) const;
+  QSet<QString> uuidKeysUnionAllLanguages(const QString& modAbsPath,
+                                          PakManifestCache* pakManifestCache = nullptr,
+                                          ScanMetrics* metrics = nullptr) const;
 
   /**
    * UUID overlap vs another mod: returns (contentId, matchedRefModName).
@@ -215,7 +261,11 @@ private:
   QPair<int, QString> applyTranslationModClassification(
       const QString& modName, int baseContentId, const QStringList& allModNames,
       const QHash<QString, int>& baseIdThisScan,
-      const QHash<QString, QSet<QString>>& uuidsThisScan) const;
+      const QHash<QString, QSet<QString>>& uuidsThisScan,
+      const QHash<QString, QSet<QString>>& persistentUuidsByMod =
+          QHash<QString, QSet<QString>>(),
+      const QHash<QString, QStringList>& uuidIndexByUuid =
+          QHash<QString, QStringList>()) const;
 
   SingleModScanResult computeSingleModScan(const QString& modName,
                                            const QString& language) const;

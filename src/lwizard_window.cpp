@@ -11,6 +11,8 @@
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMessageBox>
+#include <QProgressBar>
 #include <QPushButton>
 #include <QScrollBar>
 #include <QSignalBlocker>
@@ -117,14 +119,26 @@ void LWizardWindow::buildSettingsTab(QTabWidget* tabs)
 
   // Scan button row
   m_scanBtn = new QPushButton(tr("Scan mods"), page);
+  m_clearCacheBtn = new QPushButton(tr("Clear all caches"), page);
+  m_scanStatus = new QLabel(tr("Idle"), page);
+  m_scanStatus->setVisible(false);
+  m_scanProgress = new QProgressBar(page);
+  m_scanProgress->setVisible(false);
+  m_scanProgress->setRange(0, 100);
 
   auto* btnRow = new QHBoxLayout;
   btnRow->addStretch();
   btnRow->addWidget(m_scanBtn);
+  btnRow->addWidget(m_clearCacheBtn);
   layout->addLayout(btnRow);
+  layout->addWidget(m_scanStatus);
+  layout->addWidget(m_scanProgress);
   layout->addStretch();
 
   connect(m_scanBtn, &QPushButton::clicked, this, &LWizardWindow::startScan);
+  connect(m_clearCacheBtn, &QPushButton::clicked, this, &LWizardWindow::clearAllCaches);
+  connect(m_content.get(), &BG3LocalizationContent::scanProgress,
+          this, &LWizardWindow::onScanProgress);
   connect(m_content.get(), &BG3LocalizationContent::scanFinished,
           this, &LWizardWindow::onScanFinished);
 
@@ -234,16 +248,64 @@ void LWizardWindow::startScan()
     return;
   }
   m_scanBtn->setEnabled(false);
+  if (m_clearCacheBtn)
+    m_clearCacheBtn->setEnabled(false);
+  if (m_scanProgress) {
+    m_scanProgress->setValue(0);
+    m_scanProgress->setVisible(true);
+  }
+  if (m_scanStatus) {
+    m_scanStatus->setText(tr("Scanning mods..."));
+    m_scanStatus->setVisible(true);
+  }
   m_scanBtn->setText(tr("Scanning…"));
   // Switch to the Logs tab so the user can see progress
   if (m_tabs)
     m_tabs->setCurrentIndex(3); // Logs tab
 }
 
+void LWizardWindow::clearAllCaches()
+{
+  const int answer = QMessageBox::warning(
+      this, tr("Clear LWizard caches"),
+      tr("Clear all LWizard scan caches? This removes Content-column scan results and "
+         "embedded string caches. Saved translations and Nexus settings are kept."),
+      QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+  if (answer != QMessageBox::Yes)
+    return;
+
+  if (!m_content->clearAllCaches()) {
+    QMessageBox::information(this, tr("Clear LWizard caches"),
+                             tr("A scan is running. Wait for it to finish, then clear caches."));
+    return;
+  }
+
+  if (m_scanStatus) {
+    m_scanStatus->setText(tr("Caches cleared."));
+    m_scanStatus->setVisible(true);
+  }
+}
+
+void LWizardWindow::onScanProgress(int done, int total, const QString& currentMod)
+{
+  if (m_scanProgress) {
+    m_scanProgress->setMaximum(total > 0 ? total : 1);
+    m_scanProgress->setValue(done);
+  }
+  if (m_scanStatus)
+    m_scanStatus->setText(tr("Scanning %1 / %2: %3").arg(done).arg(total).arg(currentMod));
+}
+
 void LWizardWindow::onScanFinished()
 {
   m_scanBtn->setEnabled(true);
+  if (m_clearCacheBtn)
+    m_clearCacheBtn->setEnabled(true);
   m_scanBtn->setText(tr("Scan mods"));
+  if (m_scanStatus)
+    m_scanStatus->setText(tr("Scan complete."));
+  if (m_scanProgress)
+    m_scanProgress->setVisible(false);
 }
 
 void LWizardWindow::onLogEntry(const QString& entry)
