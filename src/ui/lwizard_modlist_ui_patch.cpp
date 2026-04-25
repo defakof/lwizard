@@ -18,7 +18,8 @@
 
 namespace {
 
-constexpr int kContentColumn = 3;
+constexpr int  kContentColumn    = 3;
+constexpr char kRowPathSeparator = '\x1f';
 
 enum LinkedHighlightKind
 {
@@ -53,6 +54,18 @@ QString resolveModName(MOBase::IOrganizer* organizer,
   return {};
 }
 
+QString displayNameForIndex(QAbstractItemModel* model, const QModelIndex& index)
+{
+  if (!model || !index.isValid())
+    return {};
+
+  const QModelIndex nameIndex = model->index(index.row(), 0, index.parent());
+  if (!nameIndex.isValid())
+    return {};
+
+  return model->data(nameIndex, Qt::DisplayRole).toString().trimmed();
+}
+
 QColor translationHighlightColor()
 {
   return QColor(186, 225, 255, 110);
@@ -61,6 +74,21 @@ QColor translationHighlightColor()
 QColor baseHighlightColor()
 {
   return QColor(244, 196, 234, 110);
+}
+
+QColor criticalHighlightColor()
+{
+  return QColor(193, 0, 0, 50);
+}
+
+QColor criticalTextColor()
+{
+  return QColor(190, 0, 0);
+}
+
+QColor toolkitHighlightColor()
+{
+  return QColor(0, 255, 77, 32);
 }
 
 } // namespace
@@ -72,11 +100,45 @@ public:
       : QIdentityProxyModel(parent), m_organizer(organizer)
   {}
 
+  void refreshModNameCache()
+  {
+    m_modNameByDisplayName.clear();
+    if (!m_organizer)
+      return;
+
+    const QStringList allMods = m_organizer->modList()->allMods();
+    for (const QString& modName : allMods) {
+      m_modNameByDisplayName.insert(modName, modName);
+      const QString displayName = m_organizer->modList()->displayName(modName).trimmed();
+      if (!displayName.isEmpty())
+        m_modNameByDisplayName.insert(displayName, modName);
+    }
+  }
+
   QVariant data(const QModelIndex& index, int role) const override
   {
-    if (role == Qt::BackgroundRole && index.isValid()) {
-      const QString modName = resolveModName(m_organizer, sourceModel(), mapToSource(index));
-      const auto    it      = m_highlightedMods.constFind(modName);
+    if ((role == Qt::BackgroundRole || role == Qt::ForegroundRole) && index.isValid()) {
+      if (role == Qt::ForegroundRole && m_extraHighlightedMods.isEmpty())
+        return QIdentityProxyModel::data(index, role);
+
+      const QString modName = resolveModNameFromCache(sourceModel(), mapToSource(index));
+      const auto    extraIt = m_extraHighlightedMods.constFind(modName);
+      if (extraIt != m_extraHighlightedMods.constEnd()) {
+        if (extraIt.value() == BG3LocalizationContent::CONTENT_INVALID_UUID ||
+            extraIt.value() == BG3LocalizationContent::CONTENT_MISSING_DEPS) {
+          if (role == Qt::BackgroundRole)
+            return criticalHighlightColor();
+          return criticalTextColor();
+        }
+        if (role == Qt::BackgroundRole &&
+            extraIt.value() == BG3LocalizationContent::CONTENT_TOOLKIT_PROJECT)
+          return toolkitHighlightColor();
+      }
+
+      if (role != Qt::BackgroundRole)
+        return QIdentityProxyModel::data(index, role);
+
+      const auto it = m_highlightedMods.constFind(modName);
       if (it != m_highlightedMods.constEnd()) {
         if (it.value() == HighlightTranslation)
           return translationHighlightColor();
@@ -96,7 +158,28 @@ public:
     emitBackgroundChanged(QModelIndex());
   }
 
+  void setExtraHighlightedMods(const QHash<QString, int>& highlightedMods)
+  {
+    if (highlightedMods == m_extraHighlightedMods)
+      return;
+    m_extraHighlightedMods = highlightedMods;
+    emitBackgroundChanged(QModelIndex());
+  }
+
+  void emitContentColumnChanged()
+  {
+    emitContentColumnChanged(QModelIndex());
+  }
+
 private:
+  QString resolveModNameFromCache(QAbstractItemModel* model, const QModelIndex& index) const
+  {
+    const QString displayName = displayNameForIndex(model, index);
+    if (displayName.isEmpty())
+      return {};
+    return m_modNameByDisplayName.value(displayName, displayName);
+  }
+
   void emitBackgroundChanged(const QModelIndex& parent)
   {
     if (!sourceModel())
@@ -107,15 +190,34 @@ private:
     if (rows <= 0 || cols <= 0)
       return;
 
-    emit dataChanged(index(0, 0, parent), index(rows - 1, cols - 1, parent), {Qt::BackgroundRole});
+    emit dataChanged(index(0, 0, parent),
+                     index(rows - 1, cols - 1, parent),
+                     {Qt::BackgroundRole, Qt::ForegroundRole});
 
     for (int row = 0; row < rows; ++row)
       emitBackgroundChanged(index(row, 0, parent));
   }
 
+  void emitContentColumnChanged(const QModelIndex& parent)
+  {
+    if (!sourceModel())
+      return;
+
+    const int rows = rowCount(parent);
+    if (rows <= 0 || columnCount(parent) <= kContentColumn)
+      return;
+
+    emit dataChanged(index(0, kContentColumn, parent), index(rows - 1, kContentColumn, parent));
+
+    for (int row = 0; row < rows; ++row)
+      emitContentColumnChanged(index(row, 0, parent));
+  }
+
 private:
-  MOBase::IOrganizer* m_organizer = nullptr;
-  QHash<QString, int> m_highlightedMods;
+  MOBase::IOrganizer*     m_organizer = nullptr;
+  QHash<QString, int>     m_highlightedMods;
+  QHash<QString, int>     m_extraHighlightedMods;
+  QHash<QString, QString> m_modNameByDisplayName;
 };
 
 LWizardModListUiPatch::LWizardModListUiPatch(MOBase::IOrganizer*                     organizer,
@@ -161,17 +263,56 @@ void LWizardModListUiPatch::ensureInstalled()
 
   if (!m_proxy)
     m_proxy = new LinkedHighlightProxyModel(m_organizer, this);
+  m_proxy->refreshModNameCache();
 
   if (currentModel != m_proxy) {
-    const QStringList selected   = selectedMods().values();
-    const QString     currentMod = modNameForIndex(m_modList->currentIndex());
+    const QStringList   selected   = selectedMods().values();
+    const QString       currentMod = modNameForIndex(m_modList->currentIndex());
+    const QSet<QString> expanded   = expandedRows();
 
     m_proxy->setSourceModel(currentModel);
     m_modList->setModel(m_proxy);
+    restoreExpandedRows(expanded);
     restoreSelection(selected, currentMod);
   }
 
   reconnectSelectionModel();
+}
+
+void LWizardModListUiPatch::refreshOrganizerPreservingState()
+{
+  ensureInstalled();
+
+  const QStringList selected   = selectedMods().values();
+  const QString     currentMod = m_modList ? modNameForIndex(m_modList->currentIndex()) : QString();
+  const QSet<QString> expanded = expandedRows();
+
+  if (m_organizer)
+    m_organizer->refresh(false);
+
+  ensureInstalled();
+  restoreExpandedRows(expanded);
+  restoreSelection(selected, currentMod);
+  refreshFromSelection();
+}
+
+void LWizardModListUiPatch::refreshContentColumn()
+{
+  ensureInstalled();
+  if (!m_modList || !m_proxy)
+    return;
+
+  if (m_contentRefreshQueued)
+    return;
+
+  m_contentRefreshQueued = true;
+  QMetaObject::invokeMethod(
+      this,
+      [this]() {
+        m_contentRefreshQueued = false;
+        refreshOrganizerPreservingState();
+      },
+      Qt::QueuedConnection);
 }
 
 void LWizardModListUiPatch::refreshFromSelection()
@@ -181,6 +322,7 @@ void LWizardModListUiPatch::refreshFromSelection()
     return;
 
   m_proxy->setHighlightedMods(highlightedModKinds());
+  m_proxy->setExtraHighlightedMods(extraHighlightedModKinds());
   if (m_modList->viewport())
     m_modList->viewport()->update();
 }
@@ -264,6 +406,13 @@ QHash<QString, int> LWizardModListUiPatch::highlightedModKinds() const
   return highlighted;
 }
 
+QHash<QString, int> LWizardModListUiPatch::extraHighlightedModKinds() const
+{
+  if (!m_content)
+    return {};
+  return m_content->extraHighlightKinds();
+}
+
 QModelIndex LWizardModListUiPatch::findModIndex(const QString&     modName,
                                                 const QModelIndex& parent) const
 {
@@ -297,18 +446,60 @@ void LWizardModListUiPatch::reconnectSelectionModel()
     return;
 
   QItemSelectionModel* selectionModel = m_modList->selectionModel();
-  m_selectionChangedConnection        = connect(selectionModel,
+  m_selectionChangedConnection = connect(selectionModel,
                                          &QItemSelectionModel::selectionChanged,
                                          this,
                                          [this](const QItemSelection&, const QItemSelection&) {
                                            refreshFromSelection();
                                          });
-  m_currentChangedConnection          = connect(selectionModel,
-                                       &QItemSelectionModel::currentChanged,
-                                       this,
-                                       [this](const QModelIndex&, const QModelIndex&) {
+  m_currentChangedConnection   = connect(selectionModel,
+                                         &QItemSelectionModel::currentChanged,
+                                         this,
+                                         [this](const QModelIndex&, const QModelIndex&) {
                                          refreshFromSelection();
-                                       });
+                                         });
+}
+
+QSet<QString> LWizardModListUiPatch::expandedRows(const QModelIndex& parent) const
+{
+  QSet<QString> rows;
+  if (!m_modList || !m_modList->model())
+    return rows;
+
+  QAbstractItemModel* model    = m_modList->model();
+  const int           rowCount = model->rowCount(parent);
+  for (int row = 0; row < rowCount; ++row) {
+    const QModelIndex index = model->index(row, 0, parent);
+    if (!index.isValid())
+      continue;
+
+    if (m_modList->isExpanded(index))
+      rows.insert(rowPathKey(index));
+
+    rows.unite(expandedRows(index));
+  }
+
+  return rows;
+}
+
+void LWizardModListUiPatch::restoreExpandedRows(const QSet<QString>& expandedRows,
+                                                const QModelIndex&   parent)
+{
+  if (!m_modList || !m_modList->model() || expandedRows.isEmpty())
+    return;
+
+  QAbstractItemModel* model    = m_modList->model();
+  const int           rowCount = model->rowCount(parent);
+  for (int row = 0; row < rowCount; ++row) {
+    const QModelIndex index = model->index(row, 0, parent);
+    if (!index.isValid())
+      continue;
+
+    if (expandedRows.contains(rowPathKey(index)))
+      m_modList->setExpanded(index, true);
+
+    restoreExpandedRows(expandedRows, index);
+  }
 }
 
 void LWizardModListUiPatch::restoreSelection(const QStringList& selectedMods,
@@ -333,4 +524,20 @@ void LWizardModListUiPatch::restoreSelection(const QStringList& selectedMods,
                                     QItemSelectionModel::NoUpdate | QItemSelectionModel::Rows);
     m_modList->scrollTo(currentIndex);
   }
+}
+
+QString LWizardModListUiPatch::rowPathKey(const QModelIndex& index) const
+{
+  if (!m_modList || !m_modList->model() || !index.isValid())
+    return {};
+
+  QStringList path;
+  QModelIndex current = index;
+  while (current.isValid()) {
+    const QString displayName = displayNameForIndex(m_modList->model(), current);
+    path.prepend(displayName.isEmpty() ? QString::number(current.row()) : displayName);
+    current = current.parent();
+  }
+
+  return path.join(QChar::fromLatin1(kRowPathSeparator));
 }

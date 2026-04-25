@@ -7,5 +7,14 @@
     <file>4_outdated.ico</file>
     <file>5_unavailable.ico</file>
     <file>6_linked.ico</file>
+    <file>AlertBar_Danger_16x.png</file>
+    <file>AlertBar_Warning_16x.png</file>
+    <file>Builder_16x.png</file>
+    <file>DivinityEngine2_64x.png</file>
+    <file>DivinityEngine2_64x_half.png</file>
+    <file>FileMissing_16x.png</file>
+    <file>Osiris_16x.png</file>
+    <file>Osiris_ModFixer_16x.png</file>
+    <file>XMLSchemaError_16x.png</file>
   </qresource>
 </RCC>

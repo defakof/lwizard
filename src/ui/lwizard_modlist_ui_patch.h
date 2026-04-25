@@ -12,6 +12,7 @@
 #include <QStringList>
 
 class BG3LocalizationContent;
+class LinkedHighlightProxyModel;
 class QMainWindow;
 class QTreeView;
 
@@ -30,6 +31,8 @@ public:
 
   bool attach(QMainWindow* mainWindow);
   void ensureInstalled();
+  void refreshOrganizerPreservingState();
+  void refreshContentColumn();
   void refreshFromSelection();
 
 protected:
@@ -40,15 +43,21 @@ private:
   std::shared_ptr<BG3LocalizationContent> m_content;
   QPointer<QMainWindow>                   m_mainWindow;
   QPointer<QTreeView>                     m_modList;
-  class LinkedHighlightProxyModel*        m_proxy = nullptr;
+  LinkedHighlightProxyModel*              m_proxy = nullptr;
   QMetaObject::Connection                 m_selectionChangedConnection;
   QMetaObject::Connection                 m_currentChangedConnection;
-  bool                                    m_missingModListLogged = false;
+  bool                                    m_missingModListLogged  = false;
+  bool                                    m_contentRefreshQueued  = false;
 
   QString             modNameForIndex(const QModelIndex& index) const;
   QSet<QString>       selectedMods() const;
   QHash<QString, int> highlightedModKinds() const;
+  QHash<QString, int> extraHighlightedModKinds() const;
   QModelIndex findModIndex(const QString& modName, const QModelIndex& parent = QModelIndex()) const;
-  void        reconnectSelectionModel();
-  void        restoreSelection(const QStringList& selectedMods, const QString& currentMod);
+  QSet<QString> expandedRows(const QModelIndex& parent = QModelIndex()) const;
+  void          reconnectSelectionModel();
+  void          restoreExpandedRows(const QSet<QString>& expandedRows,
+                                    const QModelIndex&   parent = QModelIndex());
+  void          restoreSelection(const QStringList& selectedMods, const QString& currentMod);
+  QString       rowPathKey(const QModelIndex& index) const;
 };

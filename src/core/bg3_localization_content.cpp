@@ -20,15 +20,19 @@
 #include <QVariant>
 #include <QXmlStreamReader>
 
+#include <uibase/game_features/igamefeatures.h>
+#include <uibase/game_features/scriptextender.h>
 #include <uibase/ifiletree.h>
 #include <uibase/imodinterface.h>
 #include <uibase/imodlist.h>
 #include <uibase/imoinfo.h>
+#include <uibase/iplugingame.h>
 
 namespace {
 
-constexpr int kCacheJsonVersion       = 2;
-constexpr int kLegacyCacheJsonVersion = 1;
+constexpr int kCacheJsonVersion            = 3;
+constexpr int kLegacyCacheJsonVersion      = 1;
+constexpr int kTranslationCacheJsonVersion = 2;
 
 /** Minimum loca UUID count to consider translation-mod overlap (small mods may have only a
  * handful). */
@@ -121,6 +125,67 @@ static const QString kStringsPersistentKey()
   return QStringLiteral("localization_embedded_strings_cache");
 }
 
+static const QString kShowTranslationStatusKey()
+{
+  return QStringLiteral("show_translation_status");
+}
+
+static const QString kShowExtraContentStatusesKey()
+{
+  return QStringLiteral("show_extra_content_statuses");
+}
+
+const QSet<QString>& baseGameDependencyUuids()
+{
+  static const QSet<QString> uuids = {
+      QStringLiteral("991c9c7a-fb80-40cb-8f0d-b92d4e80e9b1"), // Gustav
+      QStringLiteral("28ac9ce2-2aba-8cda-b3b5-6e922f71b6b8"), // GustavDev
+      QStringLiteral("cb555efe-2d9e-131f-8195-a89329d218ea"), // GustavX / Main Campaign
+      QStringLiteral("ed539163-bb70-431b-96a7-f5b2eda5376b"), // Shared
+      QStringLiteral("3d0c5ff8-c95d-c907-ff3e-34b204f1c630"), // SharedDev
+      QStringLiteral("9dff4c3b-fda7-43de-a763-ce1383039999"), // Engine
+      QStringLiteral("game"),                                 // Public/Game
+      QStringLiteral("e842840a-2449-588c-b0c4-22122cfce31b"), // DiceSet_01
+      QStringLiteral("b176a0ac-d79f-ed9d-5a87-5c2c80874e10"), // DiceSet_02
+      QStringLiteral("e0a4d990-7b9b-8fa9-d7c6-04017c6cf5b1"), // DiceSet_03
+      QStringLiteral("77a2155f-4b35-4f0c-e7ff-4338f91426a4"), // DiceSet_04
+      QStringLiteral("6efc8f44-cc2a-0273-d4b1-681d3faa411b"), // DiceSet_05
+      QStringLiteral("ee4989eb-aab8-968f-8674-812ea2f4bfd7"), // DiceSet_06
+      QStringLiteral("bf19bab4-4908-ef39-9065-ced469c0f877"), // DiceSet_07
+      QStringLiteral("b77b6210-ac50-4cb1-a3d5-5702fb9c744c"), // Honour
+      QStringLiteral("767d0062-d82c-279c-e16b-dfee7fe94cdd"), // HonourX
+      QStringLiteral("ee5a55ff-eb38-0b27-c5b0-f358dc306d34"), // ModBrowser
+      QStringLiteral("630daa32-70f8-3da5-41b9-154fe8410236"), // MainUI
+      QStringLiteral("e1ce736b-52e6-e713-e9e7-e6abbb15a198"), // CrossplayUI
+      QStringLiteral("55ef175c-59e3-b44b-3fb2-8f86acc5d550"), // PhotoMode
+  };
+  return uuids;
+}
+
+const QSet<QString>& baseGameDependencyNames()
+{
+  static const QSet<QString> names = {
+      QStringLiteral("crossplayui"), QStringLiteral("diceset_01"), QStringLiteral("diceset_02"),
+      QStringLiteral("diceset_03"),  QStringLiteral("diceset_04"), QStringLiteral("diceset_05"),
+      QStringLiteral("diceset_06"),  QStringLiteral("diceset_07"), QStringLiteral("engine"),
+      QStringLiteral("game"),        QStringLiteral("gustav"),     QStringLiteral("gustavdev"),
+      QStringLiteral("gustavx"),     QStringLiteral("honour"),     QStringLiteral("honourx"),
+      QStringLiteral("mainui"),      QStringLiteral("modbrowser"), QStringLiteral("photomode"),
+      QStringLiteral("shared"),      QStringLiteral("shareddev"),
+  };
+  return names;
+}
+
+bool isBaseGameDependencyUuid(const QString& uuid)
+{
+  return baseGameDependencyUuids().contains(uuid.trimmed().toLower());
+}
+
+bool isBaseGameDependencyName(const QString& name)
+{
+  return baseGameDependencyNames().contains(name.trimmed().toLower());
+}
+
 QByteArray variantToJsonBytes(const QVariant& v)
 {
   if (!v.isValid())
@@ -143,6 +208,69 @@ QStringList jsonArrayToStringList(const QJsonValue& value)
   return out;
 }
 
+QJsonArray stringListToJsonArray(const QStringList& values)
+{
+  QJsonArray out;
+  for (const QString& value : values) {
+    if (!value.trimmed().isEmpty())
+      out.append(value.trimmed());
+  }
+  return out;
+}
+
+QJsonArray dependenciesToJsonArray(
+    const QList<BG3LocalizationContent::MetadataDependency>& dependencies)
+{
+  QJsonArray out;
+  for (const BG3LocalizationContent::MetadataDependency& dependency : dependencies) {
+    if (dependency.uuid.isEmpty())
+      continue;
+    QJsonObject obj;
+    obj[QStringLiteral("uuid")] = dependency.uuid;
+    obj[QStringLiteral("name")] = dependency.name;
+    out.append(obj);
+  }
+  return out;
+}
+
+QList<BG3LocalizationContent::MetadataDependency> dependenciesFromJsonArray(const QJsonValue& value)
+{
+  QList<BG3LocalizationContent::MetadataDependency> out;
+  for (const QJsonValue& item : value.toArray()) {
+    const QJsonObject obj  = item.toObject();
+    const QString     uuid = obj[QStringLiteral("uuid")].toString().trimmed();
+    if (uuid.isEmpty())
+      continue;
+    out.append({uuid, obj[QStringLiteral("name")].toString().trimmed()});
+  }
+  return out;
+}
+
+int osirisStatusToInt(BG3LocalizationContent::OsirisStatus status)
+{
+  switch (status) {
+  case BG3LocalizationContent::OsirisStatus::Scripts:
+    return 1;
+  case BG3LocalizationContent::OsirisStatus::ModFixer:
+    return 2;
+  case BG3LocalizationContent::OsirisStatus::None:
+  default:
+    return 0;
+  }
+}
+
+BG3LocalizationContent::OsirisStatus osirisStatusFromInt(int value)
+{
+  switch (value) {
+  case 1:
+    return BG3LocalizationContent::OsirisStatus::Scripts;
+  case 2:
+    return BG3LocalizationContent::OsirisStatus::ModFixer;
+  default:
+    return BG3LocalizationContent::OsirisStatus::None;
+  }
+}
+
 QStringList normalizedLinkedMods(QStringList mods)
 {
   QSet<QString> seen;
@@ -156,6 +284,197 @@ QStringList normalizedLinkedMods(QStringList mods)
   }
   out.sort(Qt::CaseInsensitive);
   return out;
+}
+
+bool isGuidLike(const QString& value)
+{
+  static const QRegularExpression re(QStringLiteral(
+      R"(^\{?[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\}?$)"));
+  return re.match(value.trimmed()).hasMatch();
+}
+
+QString attrValue(const QXmlStreamAttributes& attrs, const QString& key)
+{
+  for (const auto& attr : attrs) {
+    if (attr.name().compare(key, Qt::CaseInsensitive) == 0)
+      return attr.value().toString();
+  }
+  return {};
+}
+
+QString attributeNodeId(const QXmlStreamAttributes& attrs)
+{
+  return attrValue(attrs, QStringLiteral("id"));
+}
+
+QString attributeNodeValue(const QXmlStreamAttributes& attrs)
+{
+  return attrValue(attrs, QStringLiteral("value"));
+}
+
+bool stackContains(const QStringList& stack, const QString& value)
+{
+  for (const QString& item : stack) {
+    if (item.compare(value, Qt::CaseInsensitive) == 0)
+      return true;
+  }
+  return false;
+}
+
+BG3LocalizationContent::ModMetadata parseMetaLsxBytes(const QByteArray& bytes)
+{
+  BG3LocalizationContent::ModMetadata metadata;
+  if (bytes.trimmed().isEmpty())
+    return metadata;
+
+  QXmlStreamReader                           xr(bytes);
+  QStringList                                nodeStack;
+  bool                                       collectingDependency = false;
+  BG3LocalizationContent::MetadataDependency currentDependency;
+
+  auto assignModuleInfo = [&](const QString& id, const QString& value) {
+    if (id.compare(QStringLiteral("UUID"), Qt::CaseInsensitive) == 0)
+      metadata.uuid = value.trimmed();
+    else if (id.compare(QStringLiteral("Name"), Qt::CaseInsensitive) == 0)
+      metadata.name = value.trimmed();
+    else if (id.compare(QStringLiteral("Folder"), Qt::CaseInsensitive) == 0)
+      metadata.folder = value.trimmed();
+    else if (id.compare(QStringLiteral("Type"), Qt::CaseInsensitive) == 0)
+      metadata.type = value.trimmed();
+  };
+
+  while (!xr.atEnd()) {
+    xr.readNext();
+
+    if (xr.isStartElement()) {
+      const QString elementName = xr.name().toString();
+      if (elementName.compare(QStringLiteral("node"), Qt::CaseInsensitive) == 0) {
+        const QString nodeId = attrValue(xr.attributes(), QStringLiteral("id"));
+        const bool    dependencyNode =
+            nodeId.compare(QStringLiteral("ModuleShortDesc"), Qt::CaseInsensitive) == 0 &&
+            stackContains(nodeStack, QStringLiteral("Dependencies"));
+        nodeStack.append(nodeId);
+        if (dependencyNode) {
+          collectingDependency = true;
+          currentDependency    = {};
+        }
+      } else if (elementName.compare(QStringLiteral("attribute"), Qt::CaseInsensitive) == 0) {
+        const QString id    = attributeNodeId(xr.attributes());
+        const QString value = attributeNodeValue(xr.attributes());
+        if (id.isEmpty())
+          continue;
+
+        if (collectingDependency) {
+          if (id.compare(QStringLiteral("UUID"), Qt::CaseInsensitive) == 0)
+            currentDependency.uuid = value.trimmed();
+          else if (id.compare(QStringLiteral("Name"), Qt::CaseInsensitive) == 0)
+            currentDependency.name = value.trimmed();
+        } else if (!nodeStack.isEmpty() &&
+                   nodeStack.constLast().compare(QStringLiteral("ModuleInfo"),
+                                                 Qt::CaseInsensitive) == 0) {
+          assignModuleInfo(id, value);
+        }
+      }
+    } else if (xr.isEndElement() &&
+               xr.name().compare(QStringLiteral("node"), Qt::CaseInsensitive) == 0) {
+      const QString ending = nodeStack.isEmpty() ? QString() : nodeStack.takeLast();
+      if (collectingDependency &&
+          ending.compare(QStringLiteral("ModuleShortDesc"), Qt::CaseInsensitive) == 0) {
+        if (!currentDependency.uuid.isEmpty())
+          metadata.dependencies.append(currentDependency);
+        collectingDependency = false;
+        currentDependency    = {};
+      }
+    }
+  }
+
+  if (xr.hasError())
+    return {};
+
+  metadata.metadataKnown = !metadata.uuid.isEmpty() || !metadata.name.isEmpty() ||
+                           !metadata.folder.isEmpty() || !metadata.dependencies.isEmpty();
+  metadata.invalidUuid =
+      metadata.metadataKnown && !metadata.uuid.isEmpty() && !isGuidLike(metadata.uuid);
+  return metadata;
+}
+
+QStringList featureFlagsFromJsonValue(const QJsonValue& value)
+{
+  QStringList out;
+  if (value.isArray()) {
+    for (const QJsonValue& item : value.toArray()) {
+      const QString flag = item.toString().trimmed();
+      if (!flag.isEmpty())
+        out.append(flag);
+    }
+  }
+  out.removeDuplicates();
+  return out;
+}
+
+void mergeScriptExtenderConfig(BG3LocalizationContent::ModMetadata* metadata,
+                               const QByteArray&                    bytes)
+{
+  if (!metadata || bytes.trimmed().isEmpty())
+    return;
+
+  QJsonParseError     err;
+  const QJsonDocument doc = QJsonDocument::fromJson(bytes, &err);
+  if (err.error != QJsonParseError::NoError || !doc.isObject())
+    return;
+
+  const QJsonObject obj                   = doc.object();
+  metadata->scriptExtenderRequiredVersion = obj[QStringLiteral("RequiredExtensionVersion")].toInt(
+      obj[QStringLiteral("RequiredVersion")].toInt(metadata->scriptExtenderRequiredVersion));
+  metadata->scriptExtenderFeatureFlags =
+      featureFlagsFromJsonValue(obj[QStringLiteral("FeatureFlags")]);
+  metadata->scriptExtenderHasSettings =
+      metadata->scriptExtenderRequiredVersion > -1 ||
+      !metadata->scriptExtenderFeatureFlags.isEmpty() ||
+      !obj[QStringLiteral("ModTable")].toString().trimmed().isEmpty();
+}
+
+bool featureFlagsContainLua(const QStringList& flags)
+{
+  for (const QString& flag : flags) {
+    if (flag.compare(QStringLiteral("Lua"), Qt::CaseInsensitive) == 0)
+      return true;
+  }
+  return false;
+}
+
+bool hasRootBuilderDWrite(const QString& modPath)
+{
+  if (modPath.isEmpty())
+    return false;
+
+  const QDir               root(modPath);
+  static const QStringList candidatePaths = {
+      QStringLiteral("DWrite.dll"),
+      QStringLiteral("bin/DWrite.dll"),
+      QStringLiteral("Root/DWrite.dll"),
+      QStringLiteral("Root/bin/DWrite.dll"),
+      QStringLiteral("root/DWrite.dll"),
+      QStringLiteral("root/bin/DWrite.dll"),
+      QStringLiteral("ROOT/DWrite.dll"),
+      QStringLiteral("ROOT/bin/DWrite.dll"),
+  };
+
+  for (const QString& relativePath : candidatePaths) {
+    if (QFileInfo::exists(root.filePath(relativePath)))
+      return true;
+  }
+
+  return false;
+}
+
+int majorVersionFromText(const QString& text)
+{
+  const QRegularExpression      re(QStringLiteral(R"((\d+))"));
+  const QRegularExpressionMatch match = re.match(text);
+  if (!match.hasMatch())
+    return -1;
+  return match.captured(1).toInt();
 }
 
 QString contentIdLabel(int contentId)
@@ -173,6 +492,24 @@ QString contentIdLabel(int contentId)
     return QStringLiteral("unavailable");
   case BG3LocalizationContent::CONTENT_TRANSLATION_MOD:
     return QStringLiteral("translation-mod");
+  case BG3LocalizationContent::CONTENT_INVALID_UUID:
+    return QStringLiteral("invalid-uuid");
+  case BG3LocalizationContent::CONTENT_MISSING_DEPS:
+    return QStringLiteral("missing-dependencies");
+  case BG3LocalizationContent::CONTENT_OSIRIS_SCRIPTS:
+    return QStringLiteral("osiris-scripts");
+  case BG3LocalizationContent::CONTENT_OSIRIS_MODFIXER:
+    return QStringLiteral("osiris-modfixer");
+  case BG3LocalizationContent::CONTENT_SE_MISSING:
+    return QStringLiteral("script-extender-missing");
+  case BG3LocalizationContent::CONTENT_SE_WARNING:
+    return QStringLiteral("script-extender-warning");
+  case BG3LocalizationContent::CONTENT_SE_REQUIRED:
+    return QStringLiteral("script-extender-required");
+  case BG3LocalizationContent::CONTENT_SE_SUPPORTS:
+    return QStringLiteral("script-extender-supports");
+  case BG3LocalizationContent::CONTENT_TOOLKIT_PROJECT:
+    return QStringLiteral("toolkit-project");
   default:
     return QStringLiteral("unknown");
   }
@@ -227,6 +564,24 @@ std::vector<MOBase::ModDataContent::Content> BG3LocalizationContent::getAllConte
       Content(CONTENT_OUTDATED, "Translation: Installed, outdated", ":/lwizard/4_outdated.ico"),
       Content(CONTENT_UNAVAILABLE, "Translation: Not available", ":/lwizard/5_unavailable.ico"),
       Content(CONTENT_TRANSLATION_MOD, "Translation: Mod (UUID match)", ":/lwizard/6_linked.ico"),
+      Content(CONTENT_INVALID_UUID, "BG3MM: Invalid UUID", ":/lwizard/XMLSchemaError_16x.png"),
+      Content(CONTENT_MISSING_DEPS, "BG3MM: Missing dependencies", ":/lwizard/FileMissing_16x.png"),
+      Content(CONTENT_OSIRIS_SCRIPTS, "BG3MM: Osiris scripts", ":/lwizard/Osiris_16x.png"),
+      Content(
+          CONTENT_OSIRIS_MODFIXER, "BG3MM: Osiris ModFixer", ":/lwizard/Osiris_ModFixer_16x.png"),
+      Content(CONTENT_SE_MISSING,
+              "BG3MM: Script Extender missing",
+              ":/lwizard/AlertBar_Danger_16x.png"),
+      Content(CONTENT_SE_WARNING,
+              "BG3MM: Script Extender warning",
+              ":/lwizard/AlertBar_Warning_16x.png"),
+      Content(CONTENT_SE_REQUIRED,
+              "BG3MM: Script Extender requirement fulfilled",
+              ":/lwizard/DivinityEngine2_64x.png"),
+      Content(CONTENT_SE_SUPPORTS,
+              "BG3MM: Script Extender support available",
+              ":/lwizard/DivinityEngine2_64x_half.png"),
+      Content(CONTENT_TOOLKIT_PROJECT, "BG3MM: Toolkit mod project", ":/lwizard/Builder_16x.png"),
   };
 }
 
@@ -239,18 +594,39 @@ std::vector<int> BG3LocalizationContent::getContentsFor(
     return {};
 
   // Only use cache — icons appear after an explicit scanAll().
-  auto lock = QMutexLocker(&m_cacheMutex);
-  auto it   = m_cache.constFind(modName);
-  if (it != m_cache.constEnd() && it->language == language && it->contentId != CONTENT_NONE)
-    return {it->contentId};
+  CacheEntry entry;
+  {
+    auto lock = QMutexLocker(&m_cacheMutex);
+    auto it   = m_cache.constFind(modName);
+    if (it == m_cache.constEnd() || it->language != language)
+      return {};
+    entry = *it;
+  }
 
-  return {};
+  std::vector<int> out;
+  if (translationStatusVisible() && entry.contentId != CONTENT_NONE)
+    out.push_back(entry.contentId);
+
+  if (extraContentStatusesVisible()) {
+    const QVector<int> extraIds = extraContentIdsFor(entry);
+    for (const int id : extraIds)
+      out.push_back(id);
+  }
+
+  return out;
+}
+
+void BG3LocalizationContent::invalidateDerivedCaches()
+{
+  m_activeMetadataUuidsCache.reset();
+  m_scriptExtenderEnvironmentCache.reset();
 }
 
 void BG3LocalizationContent::clearCache()
 {
   auto lock = QMutexLocker(&m_cacheMutex);
   m_cache.clear();
+  invalidateDerivedCaches();
 }
 
 bool BG3LocalizationContent::clearAllCaches()
@@ -266,6 +642,7 @@ bool BG3LocalizationContent::clearAllCaches()
   {
     auto lock = QMutexLocker(&m_cacheMutex);
     m_cache.clear();
+    invalidateDerivedCaches();
   }
 
   QJsonObject scanRoot;
@@ -332,30 +709,84 @@ QStringList BG3LocalizationContent::linkedModsFor(const QString& modName) const
 QString BG3LocalizationContent::contentTooltipFor(const QString& modName) const
 {
   const CacheEntry entry = entryForCurrentLanguage(modName);
-  if (!entry.relationshipsKnown)
-    return {};
+  QStringList      lines;
 
-  if (!entry.translationTarget.isEmpty()) {
-    return QStringLiteral("Translation for: %1").arg(entry.translationTarget);
+  if (translationStatusVisible() && entry.relationshipsKnown) {
+    if (!entry.translationTarget.isEmpty()) {
+      lines.append(QStringLiteral("Translation for: %1").arg(entry.translationTarget));
+    } else if (entry.separateTranslations.size() == 1) {
+      lines.append(QStringLiteral("Separate translation installed: %1")
+                       .arg(entry.separateTranslations.constFirst()));
+    } else if (!entry.separateTranslations.isEmpty()) {
+      QString tooltip = QStringLiteral("Separate translations installed:");
+      for (const QString& mod : entry.separateTranslations)
+        tooltip += QStringLiteral("\n- %1").arg(mod);
+      lines.append(tooltip);
+    }
   }
 
-  if (entry.separateTranslations.isEmpty())
-    return {};
+  if (extraContentStatusesVisible() && entry.metadata.metadataKnown) {
+    if (entry.metadata.invalidUuid)
+      lines.append(QStringLiteral("This mod has an invalid UUID, and will likely fail to load"));
 
-  if (entry.separateTranslations.size() == 1) {
-    return QStringLiteral("Separate translation installed: %1")
-        .arg(entry.separateTranslations.constFirst());
+    const QStringList missing = missingDependencyNames(entry);
+    if (!missing.isEmpty())
+      lines.append(QStringLiteral("Missing Dependencies:\n%1").arg(missing.join(QChar('\n'))));
+
+    if (entry.metadata.osirisStatus == OsirisStatus::Scripts)
+      lines.append(QStringLiteral("Has Osiris Scripting"));
+    else if (entry.metadata.osirisStatus == OsirisStatus::ModFixer)
+      lines.append(QStringLiteral("Has Mod Fixer"));
+
+    const QString extenderText = scriptExtenderSupportToolTipText(entry);
+    if (!extenderText.isEmpty())
+      lines.append(extenderText);
+
+    if (entry.metadata.editorProject)
+      lines.append(QStringLiteral("Toolkit Mod Project"));
   }
 
-  QString tooltip = QStringLiteral("Separate translations installed:");
-  for (const QString& mod : entry.separateTranslations)
-    tooltip += QStringLiteral("\n- %1").arg(mod);
-  return tooltip;
+  return lines.join(QStringLiteral("\n\n"));
 }
 
 bool BG3LocalizationContent::hasLinkedMods(const QString& modName) const
 {
+  if (!translationStatusVisible())
+    return false;
+
   return !linkedModsFor(modName).isEmpty();
+}
+
+bool BG3LocalizationContent::translationStatusVisible() const
+{
+  const QVariant value =
+      m_organizer->pluginSetting(QStringLiteral("lwizard"), kShowTranslationStatusKey());
+  return value.isValid() ? value.toBool() : true;
+}
+
+bool BG3LocalizationContent::extraContentStatusesVisible() const
+{
+  const QVariant value =
+      m_organizer->pluginSetting(QStringLiteral("lwizard"), kShowExtraContentStatusesKey());
+  return value.isValid() ? value.toBool() : false;
+}
+
+bool BG3LocalizationContent::hasCriticalExtraStatus(const QString& modName) const
+{
+  if (!extraContentStatusesVisible())
+    return false;
+
+  const CacheEntry entry = entryForCurrentLanguage(modName);
+  return entry.metadata.invalidUuid || !missingDependencyNames(entry).isEmpty();
+}
+
+bool BG3LocalizationContent::hasToolkitStatus(const QString& modName) const
+{
+  if (!extraContentStatusesVisible())
+    return false;
+
+  const CacheEntry entry = entryForCurrentLanguage(modName);
+  return entry.metadata.editorProject;
 }
 
 void BG3LocalizationContent::markNexusAvailable(const QString&    modName,
@@ -439,6 +870,36 @@ QString BG3LocalizationContent::localizationFingerprint(const QString& modAbsPat
   }
 
   {
+    QDirIterator it(modAbsPath,
+                    QStringList{QStringLiteral("meta.lsx"), QStringLiteral("Config.json")},
+                    QDir::Files,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+      it.next();
+      const QFileInfo fi = it.fileInfo();
+      const QString   rel =
+          modRoot.relativeFilePath(fi.absoluteFilePath()).replace(QChar('\\'), QChar('/'));
+      if (rel.compare(QStringLiteral("meta.lsx"), Qt::CaseInsensitive) == 0 ||
+          rel.contains(QRegularExpression(QStringLiteral(R"((^|/)Mods/[^/]+/meta\.lsx$)"),
+                                          QRegularExpression::CaseInsensitiveOption)) ||
+          rel.endsWith(QStringLiteral("ScriptExtender/Config.json"), Qt::CaseInsensitive))
+        appendFile(rel, fi);
+    }
+  }
+
+  {
+    QDirIterator it(modAbsPath, QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+      it.next();
+      const QFileInfo fi = it.fileInfo();
+      const QString   rel =
+          modRoot.relativeFilePath(fi.absoluteFilePath()).replace(QChar('\\'), QChar('/'));
+      if (rel.contains(QStringLiteral("Story/RawFiles/Goals/"), Qt::CaseInsensitive))
+        appendFile(rel, fi);
+    }
+  }
+
+  {
     const QFileInfoList rootPaks =
         modRoot.entryInfoList(QStringList{QStringLiteral("*.pak")}, QDir::Files);
     for (const QFileInfo& fi : rootPaks)
@@ -489,6 +950,152 @@ QString BG3LocalizationContent::localizationFingerprint(const QString& modAbsPat
   return QString::fromLatin1(hash.result().toHex());
 }
 
+BG3LocalizationContent::ModMetadata BG3LocalizationContent::readModMetadata(
+    const QString&    modAbsPath,
+    const QString&    modName,
+    PakManifestCache* pakManifestCache,
+    ScanMetrics*      metrics) const
+{
+  Q_UNUSED(modName)
+  Q_UNUSED(metrics)
+
+  ModMetadata metadata;
+  const QDir  root(modAbsPath);
+
+  auto readDiskFile = [](const QString& path) -> QByteArray {
+    QFile file(path);
+    if (!file.open(QIODevice::ReadOnly))
+      return {};
+    return file.readAll();
+  };
+
+  auto mergeMeta = [&](const ModMetadata& parsed) {
+    if (!parsed.metadataKnown)
+      return;
+    if (!metadata.metadataKnown)
+      metadata = parsed;
+    else {
+      if (metadata.uuid.isEmpty())
+        metadata.uuid = parsed.uuid;
+      if (metadata.name.isEmpty())
+        metadata.name = parsed.name;
+      if (metadata.folder.isEmpty())
+        metadata.folder = parsed.folder;
+      if (metadata.type.isEmpty())
+        metadata.type = parsed.type;
+      metadata.dependencies.append(parsed.dependencies);
+      metadata.metadataKnown = true;
+      metadata.invalidUuid   = !metadata.uuid.isEmpty() && !isGuidLike(metadata.uuid);
+    }
+  };
+
+  const QString rootMetaPath = root.filePath(QStringLiteral("meta.lsx"));
+  if (QFileInfo::exists(rootMetaPath)) {
+    ModMetadata parsed   = parseMetaLsxBytes(readDiskFile(rootMetaPath));
+    parsed.editorProject = parsed.metadataKnown;
+    mergeMeta(parsed);
+  }
+
+  QStringList diskMetaFiles;
+  if (root.exists()) {
+    QDirIterator it(root.path(),
+                    QStringList{QStringLiteral("meta.lsx")},
+                    QDir::Files,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+      it.next();
+      const QString rel = root.relativeFilePath(it.filePath()).replace(QChar('\\'), QChar('/'));
+      if (rel.compare(QStringLiteral("meta.lsx"), Qt::CaseInsensitive) == 0)
+        continue;
+      if (rel.contains(QRegularExpression(QStringLiteral(R"((^|/)Mods/[^/]+/meta\.lsx$)"),
+                                          QRegularExpression::CaseInsensitiveOption)))
+        diskMetaFiles.append(it.filePath());
+    }
+  }
+  diskMetaFiles.sort(Qt::CaseInsensitive);
+  for (const QString& metaPath : diskMetaFiles) {
+    mergeMeta(parseMetaLsxBytes(readDiskFile(metaPath)));
+    if (metadata.metadataKnown)
+      break;
+  }
+
+  auto updateOsiris = [&](const QString& entryName, const QByteArray& bytes) {
+    const QString                   norm = normalizedPakEntry(entryName);
+    static const QRegularExpression re(
+        QStringLiteral(R"((^|/)(Mods|Public)/[^/]+/Story/RawFiles/Goals/)"),
+        QRegularExpression::CaseInsensitiveOption);
+    if (!re.match(norm).hasMatch())
+      return;
+
+    if (metadata.osirisStatus == OsirisStatus::None)
+      metadata.osirisStatus = OsirisStatus::Scripts;
+    if (norm.contains(QStringLiteral("ForceRecompile.txt"), Qt::CaseInsensitive) ||
+        bytes.contains("NRD_KillStory") || bytes.contains("NRD_BadCall"))
+      metadata.osirisStatus = OsirisStatus::ModFixer;
+  };
+
+  if (root.exists()) {
+    QDirIterator it(root.path(), QDir::Files, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+      it.next();
+      const QString rel = root.relativeFilePath(it.filePath()).replace(QChar('\\'), QChar('/'));
+      if (rel.contains(QStringLiteral("Story/RawFiles/Goals/"), Qt::CaseInsensitive))
+        updateOsiris(rel, readDiskFile(it.filePath()));
+    }
+  }
+
+  const QString directConfigPath = root.filePath(QStringLiteral("ScriptExtender/Config.json"));
+  if (QFileInfo::exists(directConfigPath))
+    mergeScriptExtenderConfig(&metadata, readDiskFile(directConfigPath));
+
+  if (root.exists()) {
+    QDirIterator it(root.path(),
+                    QStringList{QStringLiteral("Config.json")},
+                    QDir::Files,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+      it.next();
+      const QString rel = root.relativeFilePath(it.filePath()).replace(QChar('\\'), QChar('/'));
+      if (rel.endsWith(QStringLiteral("ScriptExtender/Config.json"), Qt::CaseInsensitive))
+        mergeScriptExtenderConfig(&metadata, readDiskFile(it.filePath()));
+    }
+  }
+
+  QStringList paks;
+  collectPakPathsUnderMod(modAbsPath, &paks);
+  static const QRegularExpression pakMetaRe(QStringLiteral(R"(^Mods/([^/]+)/meta\.lsx$)"),
+                                            QRegularExpression::CaseInsensitiveOption);
+
+  for (const QString& pakPath : paks) {
+    const QString pakBaseName = QFileInfo(pakPath).completeBaseName();
+    QStringList   entries     = listPakFileEntries(pakPath, pakManifestCache, metrics);
+    QString       chosenMeta;
+    for (const QString& entry : entries) {
+      const QString                 norm  = normalizedPakEntry(entry);
+      const QRegularExpressionMatch match = pakMetaRe.match(norm);
+      if (!match.hasMatch())
+        continue;
+      if (chosenMeta.isEmpty() || pakBaseName.contains(match.captured(1), Qt::CaseInsensitive))
+        chosenMeta = norm;
+    }
+    if (!chosenMeta.isEmpty())
+      mergeMeta(parseMetaLsxBytes(LWizardPakReader::readFile(pakPath, chosenMeta)));
+
+    for (const QString& entry : entries) {
+      const QString norm = normalizedPakEntry(entry);
+      if (norm.endsWith(QStringLiteral("ScriptExtender/Config.json"), Qt::CaseInsensitive))
+        mergeScriptExtenderConfig(&metadata, LWizardPakReader::readFile(pakPath, norm));
+      if (norm.contains(QStringLiteral("Story/RawFiles/Goals/"), Qt::CaseInsensitive))
+        updateOsiris(norm, LWizardPakReader::readFile(pakPath, norm));
+    }
+  }
+
+  metadata.metadataKnown = true;
+  if (metadata.metadataKnown && !metadata.uuid.isEmpty())
+    metadata.invalidUuid = !isGuidLike(metadata.uuid);
+  return metadata;
+}
+
 void BG3LocalizationContent::hydrateMemoryFromPersistent()
 {
   const QString    lang = currentLanguage();
@@ -503,7 +1110,8 @@ void BG3LocalizationContent::hydrateMemoryFromPersistent()
     return;
   const QJsonObject root    = doc.object();
   const int         version = root[QStringLiteral("v")].toInt(0);
-  if (version != kLegacyCacheJsonVersion && version != kCacheJsonVersion)
+  if (version != kLegacyCacheJsonVersion && version != kTranslationCacheJsonVersion &&
+      version != kCacheJsonVersion)
     return;
 
   const QJsonObject          mods = root[QStringLiteral("mods")].toObject();
@@ -526,11 +1134,13 @@ void BG3LocalizationContent::hydrateMemoryFromPersistent()
     if (mod->absolutePath().compare(storedPath, Qt::CaseInsensitive) != 0)
       continue;
 
-    const int     id = langEntry[QStringLiteral("id")].toInt(CONTENT_NONE);
-    const QString fp = langEntry[QStringLiteral("fp")].toString();
-    if (id == CONTENT_NONE || fp.isEmpty())
+    const int     id        = langEntry[QStringLiteral("id")].toInt(CONTENT_NONE);
+    const QString fp        = langEntry[QStringLiteral("fp")].toString();
+    const bool    metaKnown = langEntry[QStringLiteral("metaKnown")].toBool(false);
+    if ((id == CONTENT_NONE && !metaKnown) || fp.isEmpty())
       continue;
-    if (id == CONTENT_UNAVAILABLE && discoverLanguagesInMod(mod->absolutePath()).isEmpty())
+    if (id == CONTENT_UNAVAILABLE && !metaKnown &&
+        discoverLanguagesInMod(mod->absolutePath()).isEmpty())
       continue;
 
     const QString liveFp = localizationFingerprint(mod->absolutePath());
@@ -542,16 +1152,35 @@ void BG3LocalizationContent::hydrateMemoryFromPersistent()
     entry.contentId   = id;
     entry.fingerprint = fp;
 
-    if (version >= kCacheJsonVersion) {
+    if (version >= kTranslationCacheJsonVersion) {
       entry.translationTarget    = langEntry[QStringLiteral("target")].toString().trimmed();
       entry.separateTranslations = jsonArrayToStringList(langEntry[QStringLiteral("translations")]);
       entry.relationshipsKnown   = langEntry[QStringLiteral("linksKnown")].toBool(false);
+    }
+    if (version >= kCacheJsonVersion && metaKnown) {
+      entry.metadata.metadataKnown = true;
+      entry.metadata.uuid          = langEntry[QStringLiteral("uuid")].toString().trimmed();
+      entry.metadata.name          = langEntry[QStringLiteral("modName")].toString().trimmed();
+      entry.metadata.folder        = langEntry[QStringLiteral("folder")].toString().trimmed();
+      entry.metadata.type          = langEntry[QStringLiteral("type")].toString().trimmed();
+      entry.metadata.dependencies =
+          dependenciesFromJsonArray(langEntry[QStringLiteral("dependencies")]);
+      entry.metadata.invalidUuid   = langEntry[QStringLiteral("invalidUuid")].toBool(false);
+      entry.metadata.editorProject = langEntry[QStringLiteral("editorProject")].toBool(false);
+      entry.metadata.osirisStatus =
+          osirisStatusFromInt(langEntry[QStringLiteral("osiris")].toInt(0));
+      entry.metadata.scriptExtenderRequiredVersion =
+          langEntry[QStringLiteral("seRequired")].toInt(-1);
+      entry.metadata.scriptExtenderFeatureFlags =
+          jsonArrayToStringList(langEntry[QStringLiteral("seFlags")]);
+      entry.metadata.scriptExtenderHasSettings =
+          langEntry[QStringLiteral("seHasSettings")].toBool(false);
     }
 
     loaded.insert(modName, entry);
   }
 
-  if (version >= kCacheJsonVersion) {
+  if (version >= kTranslationCacheJsonVersion) {
     for (auto it = loaded.begin(); it != loaded.end(); ++it) {
       if (!it->relationshipsKnown) {
         it->translationTarget.clear();
@@ -582,6 +1211,7 @@ void BG3LocalizationContent::hydrateMemoryFromPersistent()
   }
   for (auto it = loaded.constBegin(); it != loaded.constEnd(); ++it)
     m_cache[it.key()] = it.value();
+  invalidateDerivedCaches();
 }
 
 void BG3LocalizationContent::pruneMissingModsFromCache()
@@ -735,7 +1365,8 @@ void BG3LocalizationContent::savePersistentFromMemory(const QHash<QString, Cache
   QJsonObject mods          = root[QStringLiteral("mods")].toObject();
 
   for (auto it = entries.constBegin(); it != entries.constEnd(); ++it) {
-    if (it->contentId == CONTENT_NONE || it->fingerprint.isEmpty() || !it->relationshipsKnown)
+    if ((it->contentId == CONTENT_NONE && !it->metadata.metadataKnown) ||
+        it->fingerprint.isEmpty() || !it->relationshipsKnown)
       continue;
 
     const QString          modName   = it.key();
@@ -758,6 +1389,21 @@ void BG3LocalizationContent::savePersistentFromMemory(const QHash<QString, Cache
       for (const QString& translation : it->separateTranslations)
         translations.append(translation);
       le[QStringLiteral("translations")] = translations;
+    }
+    if (it->metadata.metadataKnown) {
+      le[QStringLiteral("metaKnown")]     = true;
+      le[QStringLiteral("uuid")]          = it->metadata.uuid;
+      le[QStringLiteral("modName")]       = it->metadata.name;
+      le[QStringLiteral("folder")]        = it->metadata.folder;
+      le[QStringLiteral("type")]          = it->metadata.type;
+      le[QStringLiteral("dependencies")]  = dependenciesToJsonArray(it->metadata.dependencies);
+      le[QStringLiteral("invalidUuid")]   = it->metadata.invalidUuid;
+      le[QStringLiteral("editorProject")] = it->metadata.editorProject;
+      le[QStringLiteral("osiris")]        = osirisStatusToInt(it->metadata.osirisStatus);
+      le[QStringLiteral("seRequired")]    = it->metadata.scriptExtenderRequiredVersion;
+      le[QStringLiteral("seFlags")] =
+          stringListToJsonArray(it->metadata.scriptExtenderFeatureFlags);
+      le[QStringLiteral("seHasSettings")] = it->metadata.scriptExtenderHasSettings;
     }
     langs[entryLang]                = le;
     modObj[QStringLiteral("langs")] = langs;
@@ -829,6 +1475,234 @@ QStringList BG3LocalizationContent::validModNames() const
     mods.append(name);
   }
   return mods;
+}
+
+QSet<QString> BG3LocalizationContent::activeMetadataUuids() const
+{
+  if (m_activeMetadataUuidsCache.has_value())
+    return *m_activeMetadataUuidsCache;
+
+  const QString           lang = currentLanguage();
+  QHash<QString, QString> uuidByMod;
+
+  {
+    QMutexLocker lock(&m_cacheMutex);
+    for (auto it = m_cache.constBegin(); it != m_cache.constEnd(); ++it) {
+      if (it->language != lang || !it->metadata.metadataKnown || it->metadata.uuid.isEmpty())
+        continue;
+      uuidByMod.insert(it.key(), it->metadata.uuid.toLower());
+    }
+  }
+
+  QSet<QString> out;
+  out.unite(baseGameDependencyUuids());
+  for (auto it = uuidByMod.constBegin(); it != uuidByMod.constEnd(); ++it) {
+    const MOBase::IModList::ModStates state = m_organizer->modList()->state(it.key());
+    if (state & MOBase::IModList::STATE_ACTIVE)
+      out.insert(it.value());
+  }
+
+  m_activeMetadataUuidsCache = out;
+  return out;
+}
+
+QStringList BG3LocalizationContent::missingDependencyNames(const CacheEntry& entry) const
+{
+  if (!entry.metadata.metadataKnown || entry.metadata.dependencies.isEmpty())
+    return {};
+
+  const QSet<QString> activeUuids = activeMetadataUuids();
+  return missingDependencyNames(entry, activeUuids);
+}
+
+QStringList BG3LocalizationContent::missingDependencyNames(const CacheEntry&    entry,
+                                                           const QSet<QString>& activeUuids) const
+{
+  if (!entry.metadata.metadataKnown || entry.metadata.dependencies.isEmpty())
+    return {};
+
+  QStringList missing;
+  for (const MetadataDependency& dependency : entry.metadata.dependencies) {
+    if (dependency.uuid.isEmpty())
+      continue;
+    const QString dependencyUuid = dependency.uuid.toLower();
+    if (isBaseGameDependencyUuid(dependencyUuid) || isBaseGameDependencyName(dependency.name) ||
+        activeUuids.contains(dependencyUuid))
+      continue;
+    missing.append(dependency.name.isEmpty() ? dependency.uuid : dependency.name);
+  }
+
+  missing.removeDuplicates();
+  missing.sort(Qt::CaseInsensitive);
+  return missing;
+}
+
+QHash<QString, int> BG3LocalizationContent::extraHighlightKinds() const
+{
+  QHash<QString, int> highlighted;
+  if (!extraContentStatusesVisible())
+    return highlighted;
+
+  const QSet<QString>        activeUuids = activeMetadataUuids();
+  const QString              lang        = currentLanguage();
+  QHash<QString, CacheEntry> entries;
+
+  {
+    QMutexLocker lock(&m_cacheMutex);
+    for (auto it = m_cache.constBegin(); it != m_cache.constEnd(); ++it) {
+      if (it->language == lang && it->metadata.metadataKnown)
+        entries.insert(it.key(), *it);
+    }
+  }
+
+  for (auto it = entries.constBegin(); it != entries.constEnd(); ++it) {
+    if (it->metadata.invalidUuid || !missingDependencyNames(*it, activeUuids).isEmpty()) {
+      highlighted.insert(it.key(), CONTENT_MISSING_DEPS);
+      continue;
+    }
+    if (it->metadata.editorProject)
+      highlighted.insert(it.key(), CONTENT_TOOLKIT_PROJECT);
+  }
+
+  return highlighted;
+}
+
+QVector<int> BG3LocalizationContent::extraContentIdsFor(const CacheEntry& entry) const
+{
+  QVector<int> out;
+  if (!entry.metadata.metadataKnown)
+    return out;
+
+  if (entry.metadata.invalidUuid)
+    out.append(CONTENT_INVALID_UUID);
+  if (!missingDependencyNames(entry).isEmpty())
+    out.append(CONTENT_MISSING_DEPS);
+
+  if (entry.metadata.osirisStatus == OsirisStatus::ModFixer)
+    out.append(CONTENT_OSIRIS_MODFIXER);
+  else if (entry.metadata.osirisStatus == OsirisStatus::Scripts)
+    out.append(CONTENT_OSIRIS_SCRIPTS);
+
+  const int extenderId = scriptExtenderContentId(entry);
+  if (extenderId != CONTENT_NONE)
+    out.append(extenderId);
+
+  if (entry.metadata.editorProject)
+    out.append(CONTENT_TOOLKIT_PROJECT);
+
+  return out;
+}
+
+ScriptExtenderEnvironment scriptExtenderEnvironmentFor(MOBase::IOrganizer* organizer)
+{
+  ScriptExtenderEnvironment env;
+  if (!organizer)
+    return env;
+
+  if (auto* game = organizer->managedGame()) {
+    const QDir gameDir   = game->gameDirectory();
+    env.updaterAvailable = QFileInfo::exists(gameDir.filePath(QStringLiteral("bin/DWrite.dll"))) ||
+                           QFileInfo::exists(gameDir.filePath(QStringLiteral("DWrite.dll")));
+  }
+
+  if (auto* features = organizer->gameFeatures()) {
+    const std::shared_ptr<MOBase::ScriptExtender> extender =
+        features->gameFeature<MOBase::ScriptExtender>();
+    if (extender) {
+      env.updaterAvailable = env.updaterAvailable || extender->isInstalled();
+      env.currentVersion   = majorVersionFromText(extender->getExtenderVersion());
+    }
+  }
+
+  const QStringList mods = organizer->modList()->allMods();
+  for (const QString& modName : mods) {
+    const MOBase::IModList::ModStates state = organizer->modList()->state(modName);
+    if (!(state & MOBase::IModList::STATE_ACTIVE))
+      continue;
+
+    MOBase::IModInterface* mod = organizer->modList()->getMod(modName);
+    if (!mod || mod->isSeparator())
+      continue;
+
+    if (hasRootBuilderDWrite(mod->absolutePath())) {
+      env.updaterAvailable = true;
+      env.rootBuilder      = true;
+      break;
+    }
+  }
+
+  return env;
+}
+
+int BG3LocalizationContent::scriptExtenderContentId(const CacheEntry& entry) const
+{
+  if (!entry.metadata.scriptExtenderHasSettings)
+    return CONTENT_NONE;
+
+  const bool requiresExtender = entry.metadata.scriptExtenderRequiredVersion > -1 ||
+                                featureFlagsContainLua(entry.metadata.scriptExtenderFeatureFlags);
+  if (!m_scriptExtenderEnvironmentCache.has_value())
+    m_scriptExtenderEnvironmentCache = scriptExtenderEnvironmentFor(m_organizer);
+  const ScriptExtenderEnvironment& env = *m_scriptExtenderEnvironmentCache;
+
+  if (requiresExtender) {
+    if (!env.updaterAvailable)
+      return CONTENT_SE_MISSING;
+    if (env.currentVersion < 0)
+      return env.rootBuilder ? CONTENT_SE_REQUIRED : CONTENT_SE_WARNING;
+    if (entry.metadata.scriptExtenderRequiredVersion > -1 &&
+        env.currentVersion < entry.metadata.scriptExtenderRequiredVersion)
+      return CONTENT_SE_WARNING;
+    return CONTENT_SE_REQUIRED;
+  }
+
+  if (!env.updaterAvailable)
+    return CONTENT_SE_WARNING;
+  return CONTENT_SE_SUPPORTS;
+}
+
+QString BG3LocalizationContent::scriptExtenderSupportToolTipText(const CacheEntry& entry) const
+{
+  if (!entry.metadata.scriptExtenderHasSettings)
+    return {};
+
+  const bool requiresExtender = entry.metadata.scriptExtenderRequiredVersion > -1 ||
+                                featureFlagsContainLua(entry.metadata.scriptExtenderFeatureFlags);
+  if (!m_scriptExtenderEnvironmentCache.has_value())
+    m_scriptExtenderEnvironmentCache = scriptExtenderEnvironmentFor(m_organizer);
+  const ScriptExtenderEnvironment& env = *m_scriptExtenderEnvironmentCache;
+  QString                          result;
+
+  if (requiresExtender) {
+    if (entry.metadata.scriptExtenderRequiredVersion > -1) {
+      result = QStringLiteral("Requires Script Extender v%1 or Higher")
+                   .arg(entry.metadata.scriptExtenderRequiredVersion);
+    } else {
+      result = QStringLiteral("Requires the Script Extender");
+    }
+  } else {
+    result = QStringLiteral("Supports the Script Extender");
+  }
+
+  if (!env.updaterAvailable)
+    result += QStringLiteral("\n(Missing DWrite.dll)");
+  else if (env.rootBuilder && env.currentVersion < 0)
+    result += QStringLiteral("\n(DWrite.dll is provided by an enabled Root Builder mod; the "
+                             "installed version cannot be read until the game is launched)");
+  else if (requiresExtender && env.currentVersion < 0)
+    result += QStringLiteral("\n(No installed Script Extender version found)");
+  else if (requiresExtender && entry.metadata.scriptExtenderRequiredVersion > -1 &&
+           env.currentVersion < entry.metadata.scriptExtenderRequiredVersion)
+    result += QStringLiteral("\n(The installed SE version is older)");
+
+  if (env.currentVersion > -1)
+    result += QStringLiteral("\nCurrently installed version is v%1").arg(env.currentVersion);
+  else if (requiresExtender)
+    result += QStringLiteral(
+        "\nIf you've already downloaded it, try opening the game once to complete the "
+        "installation process");
+
+  return result;
 }
 
 void BG3LocalizationContent::scanModAsync(const QString& modName)
@@ -905,6 +1779,7 @@ bool BG3LocalizationContent::scanAll()
     QHash<QString, QSet<QString>> scanUuids;
     QHash<QString, QString>       scanPath;
     QHash<QString, QString>       scanFp;
+    QHash<QString, ModMetadata>   scanMetadata;
 
     int done = 0;
     for (const QString& modName : mods) {
@@ -935,8 +1810,9 @@ bool BG3LocalizationContent::scanAll()
         auto lock = QMutexLocker(&m_cacheMutex);
         auto cit  = m_cache.constFind(modName);
         if (cit != m_cache.constEnd() && cit->language == language &&
-            cit->contentId != CONTENT_NONE && !cit->fingerprint.isEmpty() &&
-            cit->fingerprint == fp && cit->relationshipsKnown) {
+            (cit->contentId != CONTENT_NONE || cit->metadata.metadataKnown) &&
+            !cit->fingerprint.isEmpty() && cit->fingerprint == fp && cit->relationshipsKnown &&
+            cit->metadata.metadataKnown) {
           if (cit->contentId == CONTENT_EMBEDDED)
             ++foundEmbedded;
           else if (cit->contentId == CONTENT_TRANSLATION_MOD)
@@ -968,9 +1844,10 @@ bool BG3LocalizationContent::scanAll()
         baseId = detectContentId(tree, language, &pakManifestCache, &metrics);
       }
 
-      scanBaseId[modName] = baseId;
-      scanPath[modName]   = modPath;
-      scanFp[modName]     = fp;
+      scanBaseId[modName]   = baseId;
+      scanPath[modName]     = modPath;
+      scanFp[modName]       = fp;
+      scanMetadata[modName] = readModMetadata(modPath, modName, &pakManifestCache, &metrics);
 
       // Always union UUIDs from every language present on disk / in paks. The scan
       // language only affects detectContentId (embedded vs unavailable for *this* lang);
@@ -1047,6 +1924,7 @@ bool BG3LocalizationContent::scanAll()
       entry.translationTarget    = translationCandToRef.value(modName);
       entry.separateTranslations = baseToTranslations.value(modName);
       entry.relationshipsKnown   = true;
+      entry.metadata             = scanMetadata.value(modName);
 
       updatedEntries.insert(modName, entry);
 
@@ -1085,6 +1963,7 @@ bool BG3LocalizationContent::scanAll()
       auto lock = QMutexLocker(&m_cacheMutex);
       for (auto it = updatedEntries.constBegin(); it != updatedEntries.constEnd(); ++it)
         m_cache[it.key()] = it.value();
+      invalidateDerivedCaches();
 
       for (auto it = baseToTranslations.constBegin(); it != baseToTranslations.constEnd(); ++it) {
         if (scanBaseId.contains(it.key()))
@@ -1185,13 +2064,15 @@ BG3LocalizationContent::SingleModScanResult BG3LocalizationContent::computeSingl
   {
     auto lock = QMutexLocker(&m_cacheMutex);
     auto cit  = m_cache.constFind(modName);
-    if (cit != m_cache.constEnd() && cit->language == language && cit->contentId != CONTENT_NONE &&
+    if (cit != m_cache.constEnd() && cit->language == language &&
+        (cit->contentId != CONTENT_NONE || cit->metadata.metadataKnown) &&
         !cit->fingerprint.isEmpty() && cit->fingerprint == result.fingerprint &&
-        cit->relationshipsKnown) {
+        cit->relationshipsKnown && cit->metadata.metadataKnown) {
       result.cacheHit          = true;
       result.baseContentId     = cit->contentId;
       result.finalContentId    = cit->contentId;
       result.translationTarget = cit->translationTarget;
+      result.metadata          = cit->metadata;
       return result;
     }
   }
@@ -1206,12 +2087,14 @@ BG3LocalizationContent::SingleModScanResult BG3LocalizationContent::computeSingl
 
   PakManifestCache pakManifestCache;
   ScanMetrics      metrics;
+  result.metadata      = readModMetadata(result.modPath, modName, &pakManifestCache, &metrics);
   result.baseContentId = detectContentId(tree, language, &pakManifestCache, &metrics);
   result.uuidKeys      = uuidKeysUnionAllLanguages(result.modPath, &pakManifestCache, &metrics);
   if (result.uuidKeys.isEmpty()) {
     result.baseContentId  = CONTENT_NONE;
     result.finalContentId = CONTENT_NONE;
-    return result;
+    if (!result.metadata.metadataKnown)
+      return result;
   }
 
   QHash<QString, int>           scanBaseId;
@@ -1258,6 +2141,7 @@ void BG3LocalizationContent::applySingleModScanResult(const SingleModScanResult&
   entry.fingerprint        = result.fingerprint;
   entry.translationTarget  = result.translationTarget;
   entry.relationshipsKnown = true;
+  entry.metadata           = result.metadata;
 
   {
     auto lock = QMutexLocker(&m_cacheMutex);
@@ -1272,6 +2156,7 @@ void BG3LocalizationContent::applySingleModScanResult(const SingleModScanResult&
     }
 
     m_cache[result.modName] = entry;
+    invalidateDerivedCaches();
 
     if (!entry.translationTarget.isEmpty()) {
       auto refIt = m_cache.find(entry.translationTarget);

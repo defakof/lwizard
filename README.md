@@ -18,12 +18,12 @@ It currently provides:
 
 LWizard registers two `IPluginTool` entries under the `LWizard/` submenu:
 
-- `LWizard/Menu` opens the main dialog
-- `LWizard/Unpack mod` extracts `.pak` archives from a selected mod with Divine (LSLib)
+- `LWizard/Settings` opens the main dialog
+- `LWizard/Utilities/Unpack mod` extracts `.pak` archives from a selected mod with Divine (LSLib)
 
 The main dialog has four tabs:
 
-- **Settings** — target localization language, optional "cache only current language" switch, **Scan mods** button; language changes saved immediately via MO2 plugin settings
+- **Settings** — grouped controls for Content-column visibility, localization scanning, future patch automation, and cache maintenance; changes are saved immediately via MO2 plugin settings
 - **Translation** — full mod string editor and AI translation pipeline (see below)
 - **Nexus Downloads** — manual Nexus translation discovery, optional API key, one-click MO2 download queueing
 - **Logs** — live plugin log buffer
@@ -47,6 +47,10 @@ The implemented paths today are:
 - Nexus-backed availability updates for mods that scan as unavailable locally but have matching translation pages on Nexus for the active language
 
 The outdated state is still a placeholder for a later pipeline.
+
+Translation status icons can be hidden from the Settings tab or MO2 plugin settings. When hidden, LWizard keeps scan caches intact but stops contributing translation icons and pairing tooltips to the MO2 Content column. The Settings tab also controls BG3 Mod Manager-style metadata icons for invalid UUIDs, missing enabled dependencies, Osiris scripts, Script Extender support, and toolkit projects, plus a switch for automatic scans when new mods are installed.
+
+BG3 metadata status icons are adapted from [BG3 Mod Manager](https://github.com/LaughingLeader/BG3ModManager), MIT License, Copyright (c) 2019 LaughingLeader.
 
 ### Translation tab
 

@@ -2,25 +2,35 @@
 
 #include "core/bg3_localization_content.h"
 #include "core/lwizard_log.h"
+#include "ui/lwizard_modlist_ui_patch.h"
 #include "ui/lwizard_nexus_tab.h"
 #include "ui/lwizard_translation_tab.h"
 
+#include <QAbstractItemView>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDialogButtonBox>
+#include <QEvent>
 #include <QFormLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLineEdit>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QScrollBar>
 #include <QSignalBlocker>
+#include <QStandardItem>
+#include <QStandardItemModel>
 #include <QTabWidget>
 #include <QTextEdit>
 #include <QVBoxLayout>
 #include <QVariant>
+
+#include <functional>
 
 #include <uibase/imoinfo.h>
 
@@ -44,13 +54,173 @@ static const QStringList k_languages = {
     QStringLiteral("Japanese"),
 };
 
+static const QString kShowTranslationStatusKey()
+{
+  return QStringLiteral("show_translation_status");
+}
+
+static const QString kShowExtraContentStatusesKey()
+{
+  return QStringLiteral("show_extra_content_statuses");
+}
+
+static const QString kAutoDownloadPatchesKey()
+{
+  return QStringLiteral("auto_download_patches");
+}
+
+static const QString kAutoScanOnInstallKey()
+{
+  return QStringLiteral("auto_scan_on_install");
+}
+
+void configureSettingsForm(QFormLayout* form)
+{
+  form->setContentsMargins(10, 18, 10, 10);
+  form->setHorizontalSpacing(12);
+  form->setVerticalSpacing(10);
+}
+
+class CheckableComboBox : public QComboBox
+{
+public:
+  explicit CheckableComboBox(QWidget* parent = nullptr) : QComboBox(parent)
+  {
+    auto* items = new QStandardItemModel(this);
+    setModel(items);
+    setEditable(true);
+    if (lineEdit())
+      lineEdit()->setReadOnly(true);
+    setInsertPolicy(QComboBox::NoInsert);
+    view()->viewport()->installEventFilter(this);
+    connect(items, &QStandardItemModel::itemChanged, this, [this](QStandardItem*) {
+      refreshSummaryText();
+      if (!m_signalsBlocked && m_onSelectionChanged)
+        m_onSelectionChanged();
+    });
+  }
+
+  void addCheckItem(const QString& text, const QVariant& value, bool checked)
+  {
+    auto* item = new QStandardItem(text);
+    item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
+    item->setData(value, Qt::UserRole);
+    item->setData(checked ? Qt::Checked : Qt::Unchecked, Qt::CheckStateRole);
+    static_cast<QStandardItemModel*>(model())->appendRow(item);
+    refreshSummaryText();
+  }
+
+  bool isChecked(const QVariant& value) const
+  {
+    auto* items = static_cast<QStandardItemModel*>(model());
+    for (int row = 0; row < items->rowCount(); ++row) {
+      const QStandardItem* item = items->item(row);
+      if (item && item->data(Qt::UserRole) == value)
+        return item->checkState() == Qt::Checked;
+    }
+    return false;
+  }
+
+  void setChecked(const QVariant& value, bool checked)
+  {
+    auto* items = static_cast<QStandardItemModel*>(model());
+    for (int row = 0; row < items->rowCount(); ++row) {
+      QStandardItem* item = items->item(row);
+      if (item && item->data(Qt::UserRole) == value) {
+        item->setCheckState(checked ? Qt::Checked : Qt::Unchecked);
+        return;
+      }
+    }
+  }
+
+  void setSummaryTextProvider(std::function<QString(const CheckableComboBox&)> provider)
+  {
+    m_summaryTextProvider = std::move(provider);
+    refreshSummaryText();
+  }
+
+  void setSelectionChangedHandler(std::function<void()> handler)
+  {
+    m_onSelectionChanged = std::move(handler);
+  }
+
+  void setSignalsBlocked(bool blocked)
+  {
+    m_signalsBlocked = blocked;
+  }
+
+protected:
+  bool eventFilter(QObject* watched, QEvent* event) override
+  {
+    if (watched == view()->viewport() && event->type() == QEvent::MouseButtonRelease) {
+      auto* mouseEvent = static_cast<QMouseEvent*>(event);
+      const QModelIndex index = view()->indexAt(mouseEvent->pos());
+      if (!index.isValid())
+        return false;
+
+      auto* item = static_cast<QStandardItemModel*>(model())->itemFromIndex(index);
+      if (!item)
+        return false;
+
+      const bool checked = item->checkState() == Qt::Checked;
+      item->setCheckState(checked ? Qt::Unchecked : Qt::Checked);
+      return true;
+    }
+
+    return QComboBox::eventFilter(watched, event);
+  }
+
+private:
+  void refreshSummaryText()
+  {
+    if (!lineEdit())
+      return;
+
+    if (m_summaryTextProvider) {
+      lineEdit()->setText(m_summaryTextProvider(*this));
+      return;
+    }
+
+    lineEdit()->setText(currentText());
+  }
+
+  std::function<QString(const CheckableComboBox&)> m_summaryTextProvider;
+  std::function<void()>                            m_onSelectionChanged;
+  bool                                             m_signalsBlocked = false;
+};
+
+enum class ContentStatusOption
+{
+  TranslationStatus,
+  Bg3mmStatuses,
+};
+
+QString contentStatusSummary(const CheckableComboBox& combo)
+{
+  const bool translation = combo.isChecked(static_cast<int>(ContentStatusOption::TranslationStatus));
+  const bool bg3mm = combo.isChecked(static_cast<int>(ContentStatusOption::Bg3mmStatuses));
+
+  if (translation && bg3mm)
+    return QCoreApplication::translate("LWizardWindow", "Both");
+  if (translation)
+    return QCoreApplication::translate("LWizardWindow", "Translation only");
+  if (bg3mm)
+    return QCoreApplication::translate("LWizardWindow", "BG3MM-style only");
+  return QCoreApplication::translate("LWizardWindow", "None");
+}
+
 // ---------------------------------------------------------------------------
 
 LWizardWindow::LWizardWindow(MOBase::IOrganizer*                     organizer,
                              std::shared_ptr<BG3LocalizationContent> content,
                              LWizardNexusApi*                        nexusApi,
+                             LWizardModListUiPatch*                  modListUiPatch,
                              QWidget*                                parent)
-    : QDialog(parent), m_organizer(organizer), m_content(std::move(content)), m_nexusApi(nexusApi)
+    : QDialog(parent),
+      m_organizer(organizer),
+      m_content(std::move(content)),
+      m_nexusApi(nexusApi),
+      m_modListUiPatch(modListUiPatch)
 {
   setWindowTitle(tr("LWizard"));
   setMinimumSize(900, 600);
@@ -86,12 +256,42 @@ void LWizardWindow::buildSettingsTab(QTabWidget* tabs)
   auto* page   = new QWidget;
   auto* layout = new QVBoxLayout(page);
   layout->setContentsMargins(12, 12, 12, 12);
-  layout->setSpacing(10);
+  layout->setSpacing(14);
 
-  // Language group
-  auto* grp       = new QGroupBox(tr("Localization scanning"), page);
-  auto* form      = new QFormLayout(grp);
-  m_languageCombo = new QComboBox(grp);
+  auto* contentGroup = new QGroupBox(tr("Content column"), page);
+  auto* contentForm  = new QFormLayout(contentGroup);
+  configureSettingsForm(contentForm);
+
+  m_contentStatusesCombo = new CheckableComboBox(contentGroup);
+  m_contentStatusesCombo->addCheckItem(tr("Translation status"),
+                                       static_cast<int>(ContentStatusOption::TranslationStatus),
+                                       savedBoolSetting(kShowTranslationStatusKey(), true));
+  m_contentStatusesCombo->addCheckItem(tr("BG3MM-style statuses"),
+                                       static_cast<int>(ContentStatusOption::Bg3mmStatuses),
+                                       savedBoolSetting(kShowExtraContentStatusesKey(), true));
+  m_contentStatusesCombo->setSummaryTextProvider(contentStatusSummary);
+  m_contentStatusesCombo->setToolTip(
+      tr("Choose which LWizard icon groups appear in the MO2 Content column."));
+  m_contentStatusesCombo->setSelectionChangedHandler([this]() {
+    m_organizer->setPluginSetting(
+        QStringLiteral("lwizard"),
+        kShowTranslationStatusKey(),
+        QVariant(m_contentStatusesCombo->isChecked(
+            static_cast<int>(ContentStatusOption::TranslationStatus))));
+    m_organizer->setPluginSetting(
+        QStringLiteral("lwizard"),
+        kShowExtraContentStatusesKey(),
+        QVariant(m_contentStatusesCombo->isChecked(
+            static_cast<int>(ContentStatusOption::Bg3mmStatuses))));
+  });
+  contentForm->addRow(tr("Visible statuses:"), m_contentStatusesCombo);
+
+  layout->addWidget(contentGroup);
+
+  auto* localizationGroup = new QGroupBox(tr("Localization scanning"), page);
+  auto* localizationForm  = new QFormLayout(localizationGroup);
+  configureSettingsForm(localizationForm);
+  m_languageCombo = new QComboBox(localizationGroup);
   m_languageCombo->addItems(k_languages);
 
   {
@@ -101,34 +301,65 @@ void LWizardWindow::buildSettingsTab(QTabWidget* tabs)
     m_languageCombo->setCurrentIndex(idx >= 0 ? idx : 0);
   }
 
-  form->addRow(tr("Language to scan for:"), m_languageCombo);
+  localizationForm->addRow(tr("Language to scan for:"), m_languageCombo);
 
   m_cacheOnlyCurrentLang = new QCheckBox(
       tr("Persist scan cache only for that language (removes other languages from disk "
          "when the cache is saved or when you enable this)."),
-      grp);
+      localizationGroup);
   {
     QSignalBlocker block(m_cacheOnlyCurrentLang);
     const QVariant cacheOnly = m_organizer->pluginSetting(
         QStringLiteral("lwizard"), QStringLiteral("cache_only_current_language"));
     m_cacheOnlyCurrentLang->setChecked(cacheOnly.isValid() ? cacheOnly.toBool() : false);
   }
-  form->addRow(tr("Disk cache:"), m_cacheOnlyCurrentLang);
+  localizationForm->addRow(tr("Disk cache:"), m_cacheOnlyCurrentLang);
 
-  layout->addWidget(grp);
+  m_autoScanOnInstall =
+      new QCheckBox(tr("Automatically scan newly installed mods"), localizationGroup);
+  {
+    QSignalBlocker block(m_autoScanOnInstall);
+    m_autoScanOnInstall->setChecked(savedBoolSetting(kAutoScanOnInstallKey(), true));
+  }
+  localizationForm->addRow(tr("New installs:"), m_autoScanOnInstall);
+
+  layout->addWidget(localizationGroup);
+
+  auto* patchGroup = new QGroupBox(tr("Patches"), page);
+  auto* patchForm  = new QFormLayout(patchGroup);
+  configureSettingsForm(patchForm);
+  m_autoDownloadPatches =
+      new QCheckBox(tr("Automatically look for and download patches (placeholder)"), patchGroup);
+  {
+    QSignalBlocker block(m_autoDownloadPatches);
+    m_autoDownloadPatches->setChecked(savedBoolSetting(kAutoDownloadPatchesKey(), false));
+  }
+  patchForm->addRow(tr("Patch automation:"), m_autoDownloadPatches);
+  layout->addWidget(patchGroup);
 
   connect(m_languageCombo, &QComboBox::currentIndexChanged, this, &LWizardWindow::saveSettings);
   connect(m_cacheOnlyCurrentLang,
           &QCheckBox::toggled,
           this,
           &LWizardWindow::onCacheOnlyCurrentLangToggled);
+  connect(m_autoScanOnInstall, &QCheckBox::toggled, this, [this](bool checked) {
+    m_organizer->setPluginSetting(
+        QStringLiteral("lwizard"), kAutoScanOnInstallKey(), QVariant(checked));
+  });
+  connect(m_autoDownloadPatches, &QCheckBox::toggled, this, [this](bool checked) {
+    m_organizer->setPluginSetting(
+        QStringLiteral("lwizard"), kAutoDownloadPatchesKey(), QVariant(checked));
+  });
 
-  // Scan button row
-  m_scanBtn       = new QPushButton(tr("Scan mods"), page);
-  m_clearCacheBtn = new QPushButton(tr("Clear all caches"), page);
-  m_scanStatus    = new QLabel(tr("Idle"), page);
+  auto* maintenanceGroup  = new QGroupBox(tr("Maintenance"), page);
+  auto* maintenanceLayout = new QVBoxLayout(maintenanceGroup);
+  maintenanceLayout->setSpacing(8);
+
+  m_scanBtn       = new QPushButton(tr("Scan mods"), maintenanceGroup);
+  m_clearCacheBtn = new QPushButton(tr("Clear all caches"), maintenanceGroup);
+  m_scanStatus    = new QLabel(tr("Idle"), maintenanceGroup);
   m_scanStatus->setVisible(false);
-  m_scanProgress = new QProgressBar(page);
+  m_scanProgress = new QProgressBar(maintenanceGroup);
   m_scanProgress->setVisible(false);
   m_scanProgress->setRange(0, 100);
 
@@ -136,9 +367,10 @@ void LWizardWindow::buildSettingsTab(QTabWidget* tabs)
   btnRow->addStretch();
   btnRow->addWidget(m_scanBtn);
   btnRow->addWidget(m_clearCacheBtn);
-  layout->addLayout(btnRow);
-  layout->addWidget(m_scanStatus);
-  layout->addWidget(m_scanProgress);
+  maintenanceLayout->addLayout(btnRow);
+  maintenanceLayout->addWidget(m_scanStatus);
+  maintenanceLayout->addWidget(m_scanProgress);
+  layout->addWidget(maintenanceGroup);
   layout->addStretch();
 
   connect(m_scanBtn, &QPushButton::clicked, this, &LWizardWindow::startScan);
@@ -224,6 +456,12 @@ QString LWizardWindow::currentSavedLanguage() const
   }
   const QString s = v.toString();
   return s.isEmpty() ? QStringLiteral("English") : s;
+}
+
+bool LWizardWindow::savedBoolSetting(const QString& key, bool defaultValue) const
+{
+  const QVariant value = m_organizer->pluginSetting(QStringLiteral("lwizard"), key);
+  return value.isValid() ? value.toBool() : defaultValue;
 }
 
 // ---------------------------------------------------------------------------

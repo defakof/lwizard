@@ -9,8 +9,11 @@
 
 #include <QMainWindow>
 
+#include <map>
+
 #include <uibase/game_features/igamefeatures.h>
 #include <uibase/iplugingame.h>
+#include <uibase/imodlist.h>
 #include <uibase/imoinfo.h>
 
 // ---------------------------------------------------------------------------
@@ -42,9 +45,11 @@ bool LWizardPlugin::init(MOBase::IOrganizer* organizer)
   // column re-queries getContentsFor() and picks up the newly cached results.
   QObject::connect(
       m_localizationContent.get(), &BG3LocalizationContent::contentCacheUpdated, [this]() {
-        m_organizer->refresh(false);
-        if (m_modListUiPatch)
-          m_modListUiPatch->refreshFromSelection();
+        if (m_modListUiPatch) {
+          m_modListUiPatch->refreshOrganizerPreservingState();
+        } else {
+          m_organizer->refresh(false);
+        }
       });
 
   organizer->modList()->onModInstalled([this](MOBase::IModInterface* mod) {
@@ -54,6 +59,14 @@ bool LWizardPlugin::init(MOBase::IOrganizer* organizer)
     const QString modName = mod->name().trimmed();
     if (modName.isEmpty())
       return;
+
+    const QVariant autoScanSetting =
+        m_organizer->pluginSetting(name(), QStringLiteral("auto_scan_on_install"));
+    if (autoScanSetting.isValid() && !autoScanSetting.toBool()) {
+      LWizardLog::info(
+          QStringLiteral("Automatic scan skipped for newly installed mod: %1").arg(modName));
+      return;
+    }
 
     LWizardLog::info(QStringLiteral("Detected newly installed mod: %1").arg(modName));
 
@@ -78,6 +91,16 @@ bool LWizardPlugin::init(MOBase::IOrganizer* organizer)
       m_nexusApi->scanModAsync(modName, nexusId, lang);
     }
   });
+
+  organizer->modList()->onModStateChanged(
+      [this](const std::map<QString, MOBase::IModList::ModStates>&) {
+        m_localizationContent->invalidateDerivedCaches();
+        if (m_modListUiPatch) {
+          m_modListUiPatch->refreshOrganizerPreservingState();
+        } else {
+          m_organizer->refresh(false);
+        }
+      });
 
   // Register ModDataContent after the UI is up (same pattern as mo2-bg3-translation-
   // checker’s plugin_content.py). Early init() registration can leave the Content
@@ -104,16 +127,27 @@ bool LWizardPlugin::init(MOBase::IOrganizer* organizer)
               m_localizationContent->prunePersistentCacheToCurrentLanguageOnly();
           }
           m_localizationContent->hydrateMemoryFromPersistent();
-          m_organizer->refresh(false);
-          if (m_modListUiPatch)
-            m_modListUiPatch->refreshFromSelection();
+          if (m_modListUiPatch) {
+            m_modListUiPatch->refreshOrganizerPreservingState();
+          } else {
+            m_organizer->refresh(false);
+          }
         } else if (key == QStringLiteral("cache_only_current_language")) {
           if (newValue.toBool())
             m_localizationContent->prunePersistentCacheToCurrentLanguageOnly();
           m_localizationContent->hydrateMemoryFromPersistent();
-          m_organizer->refresh(false);
-          if (m_modListUiPatch)
-            m_modListUiPatch->refreshFromSelection();
+          if (m_modListUiPatch) {
+            m_modListUiPatch->refreshOrganizerPreservingState();
+          } else {
+            m_organizer->refresh(false);
+          }
+        } else if (key == QStringLiteral("show_translation_status") ||
+                   key == QStringLiteral("show_extra_content_statuses")) {
+          if (m_modListUiPatch) {
+            m_modListUiPatch->refreshContentColumn();
+          } else {
+            m_organizer->refresh(false);
+          }
         }
       });
 
@@ -163,7 +197,7 @@ void LWizardPlugin::registerLocalizationContentFeature()
 
 QString LWizardPlugin::displayName() const
 {
-  return tr("LWizard/Menu");
+  return tr("LWizard/Settings");
 }
 
 QString LWizardPlugin::tooltip() const
@@ -178,7 +212,8 @@ QIcon LWizardPlugin::icon() const
 
 void LWizardPlugin::display() const
 {
-  auto* win = new LWizardWindow(m_organizer, m_localizationContent, m_nexusApi, parentWidget());
+  auto* win = new LWizardWindow(
+      m_organizer, m_localizationContent, m_nexusApi, m_modListUiPatch.get(), parentWidget());
   win->exec();
 }
 
@@ -203,12 +238,25 @@ QString LWizardPlugin::description() const
 
 MOBase::VersionInfo LWizardPlugin::version() const
 {
-  return MOBase::VersionInfo(0, 2, 8, MOBase::VersionInfo::RELEASE_FINAL);
+  return MOBase::VersionInfo(0, 2, 10, MOBase::VersionInfo::RELEASE_FINAL);
 }
 
 QList<MOBase::PluginSetting> LWizardPlugin::settings() const
 {
   return {
+      MOBase::PluginSetting(QStringLiteral("show_translation_status"),
+                            tr("Show LWizard translation status icons in the MO2 Content column"),
+                            QVariant(true)),
+      MOBase::PluginSetting(QStringLiteral("show_extra_content_statuses"),
+                            tr("Show BG3 Mod Manager-style metadata and Script Extender status "
+                               "icons in the MO2 Content column"),
+                            QVariant(true)),
+      MOBase::PluginSetting(QStringLiteral("auto_download_patches"),
+                            tr("Automatically look for and download patches (placeholder)."),
+                            QVariant(false)),
+      MOBase::PluginSetting(QStringLiteral("auto_scan_on_install"),
+                            tr("Automatically scan newly installed mods"),
+                            QVariant(true)),
       MOBase::PluginSetting(QStringLiteral("language"),
                             tr("Localization language to scan for in BG3 mods"),
                             QStringList{

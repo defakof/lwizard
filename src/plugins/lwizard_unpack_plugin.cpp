@@ -18,7 +18,7 @@ bool LWizardUnpackPlugin::init(MOBase::IOrganizer* organizer)
 
 QString LWizardUnpackPlugin::displayName() const
 {
-  return tr("LWizard/Unpack mod");
+  return tr("LWizard/Utilities/Unpack mod");
 }
 
 QString LWizardUnpackPlugin::tooltip() const
@@ -55,7 +55,7 @@ QString LWizardUnpackPlugin::description() const
 
 MOBase::VersionInfo LWizardUnpackPlugin::version() const
 {
-  return MOBase::VersionInfo(0, 2, 0, MOBase::VersionInfo::RELEASE_FINAL);
+  return MOBase::VersionInfo(0, 2, 1, MOBase::VersionInfo::RELEASE_FINAL);
 }
 
 QList<MOBase::PluginSetting> LWizardUnpackPlugin::settings() const

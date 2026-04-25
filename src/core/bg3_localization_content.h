@@ -2,20 +2,30 @@
 
 #include <atomic>
 #include <memory>
+#include <optional>
 #include <vector>
 
 #include <QByteArray>
 #include <QHash>
 #include <QJsonObject>
+#include <QList>
 #include <QMap>
 #include <QMutex>
 #include <QObject>
 #include <QPair>
+#include <QVector>
 #include <QSet>
 #include <QString>
 #include <QStringList>
 
 #include <uibase/game_features/moddatacontent.h>
+
+struct ScriptExtenderEnvironment
+{
+  bool updaterAvailable = false;
+  bool rootBuilder      = false;
+  int  currentVersion   = -1;
+};
 
 namespace MOBase {
 class IOrganizer;
@@ -48,6 +58,15 @@ public:
   static constexpr int CONTENT_OUTDATED        = 3;
   static constexpr int CONTENT_UNAVAILABLE     = 4;
   static constexpr int CONTENT_TRANSLATION_MOD = 5;
+  static constexpr int CONTENT_INVALID_UUID    = 6;
+  static constexpr int CONTENT_MISSING_DEPS    = 7;
+  static constexpr int CONTENT_OSIRIS_SCRIPTS  = 8;
+  static constexpr int CONTENT_OSIRIS_MODFIXER = 9;
+  static constexpr int CONTENT_SE_MISSING      = 10;
+  static constexpr int CONTENT_SE_WARNING      = 11;
+  static constexpr int CONTENT_SE_REQUIRED     = 12;
+  static constexpr int CONTENT_SE_SUPPORTS     = 13;
+  static constexpr int CONTENT_TOOLKIT_PROJECT = 14;
   static constexpr int CONTENT_NONE            = -1; // not yet scanned
 
   explicit BG3LocalizationContent(MOBase::IOrganizer* organizer);
@@ -99,7 +118,12 @@ public:
   /** Returns custom Content-column tooltip text for translation/base pairs. */
   QString contentTooltipFor(const QString& modName) const;
 
-  bool hasLinkedMods(const QString& modName) const;
+  bool                hasLinkedMods(const QString& modName) const;
+  bool                translationStatusVisible() const;
+  bool                extraContentStatusesVisible() const;
+  bool                hasCriticalExtraStatus(const QString& modName) const;
+  bool                hasToolkitStatus(const QString& modName) const;
+  QHash<QString, int> extraHighlightKinds() const;
 
   /**
    * Mark a mod as having translations available on Nexus (updates content state
@@ -110,6 +134,8 @@ public:
 
   /** Return stored Nexus translation mod IDs, or empty list if none known. */
   QList<int> nexusTranslationModIds(const QString& modName) const;
+
+  void invalidateDerivedCaches();
 
   /**
    * Return all mod names that are currently CONTENT_UNAVAILABLE for the active language.
@@ -150,6 +176,37 @@ private:
     QHash<QString, QStringList> entriesByPakPath;
   };
 
+public:
+  enum class OsirisStatus
+  {
+    None,
+    Scripts,
+    ModFixer,
+  };
+
+  struct MetadataDependency
+  {
+    QString uuid;
+    QString name;
+  };
+
+  struct ModMetadata
+  {
+    QString                   uuid;
+    QString                   name;
+    QString                   folder;
+    QString                   type;
+    QList<MetadataDependency> dependencies;
+    QStringList               scriptExtenderFeatureFlags;
+    int                       scriptExtenderRequiredVersion = -1;
+    bool                      metadataKnown                 = false;
+    bool                      invalidUuid                   = false;
+    bool                      editorProject                 = false;
+    bool                      scriptExtenderHasSettings     = false;
+    OsirisStatus              osirisStatus                  = OsirisStatus::None;
+  };
+
+private:
   struct SingleModScanResult
   {
     QString       modName;
@@ -159,6 +216,7 @@ private:
     QString       translationTarget;
     QByteArray    embeddedStrings;
     QSet<QString> uuidKeys;
+    ModMetadata   metadata;
     int           baseContentId  = CONTENT_NONE;
     int           finalContentId = CONTENT_NONE;
     bool          valid          = false;
@@ -174,20 +232,29 @@ private:
     QString     translationTarget;
     QStringList separateTranslations;
     bool        relationshipsKnown = false;
+    ModMetadata metadata;
     /** Nexus Mods translation mod IDs discovered by the Nexus tab scanner. */
     QList<int> nexusTranslationModIds;
   };
-  mutable QHash<QString, CacheEntry> m_cache;
-  mutable QMutex                     m_cacheMutex;
+  mutable QHash<QString, CacheEntry>   m_cache;
+  mutable QMutex                       m_cacheMutex;
+  mutable std::optional<QSet<QString>> m_activeMetadataUuidsCache;
+  mutable std::optional<ScriptExtenderEnvironment>
+      m_scriptExtenderEnvironmentCache;
 
   mutable QMutex m_autoScanMutex;
   QStringList    m_autoScanQueue;
   QSet<QString>  m_autoScanPending;
   bool           m_autoScanRunning = false;
 
-  QString     currentLanguage() const;
-  bool        cacheOnlyCurrentLanguage() const;
-  QStringList validModNames() const;
+  QString       currentLanguage() const;
+  bool          cacheOnlyCurrentLanguage() const;
+  QStringList   validModNames() const;
+  QStringList   missingDependencyNames(const CacheEntry& entry) const;
+  QStringList   missingDependencyNames(const CacheEntry&    entry,
+                                       const QSet<QString>& activeUuids) const;
+  QSet<QString> activeMetadataUuids() const;
+  QVector<int>  extraContentIdsFor(const CacheEntry& entry) const;
 
   /** Returns CONTENT_EMBEDDED if localization is found, CONTENT_UNAVAILABLE otherwise. */
   int  detectContentId(std::shared_ptr<const MOBase::IFileTree> tree,
@@ -199,10 +266,16 @@ private:
                           PakManifestCache* pakManifestCache = nullptr,
                           ScanMetrics*      metrics          = nullptr) const;
 
-  void    savePersistentFromMemory();
-  void    savePersistentFromMemory(const QHash<QString, CacheEntry>& entries);
-  void    filterModsJsonToSingleLanguage(QJsonObject& mods, const QString& keepLang) const;
-  QString localizationFingerprint(const QString& modAbsPath) const;
+  void        savePersistentFromMemory();
+  void        savePersistentFromMemory(const QHash<QString, CacheEntry>& entries);
+  void        filterModsJsonToSingleLanguage(QJsonObject& mods, const QString& keepLang) const;
+  QString     localizationFingerprint(const QString& modAbsPath) const;
+  ModMetadata readModMetadata(const QString&    modAbsPath,
+                              const QString&    modName,
+                              PakManifestCache* pakManifestCache = nullptr,
+                              ScanMetrics*      metrics          = nullptr) const;
+  QString     scriptExtenderSupportToolTipText(const CacheEntry& entry) const;
+  int         scriptExtenderContentId(const CacheEntry& entry) const;
 
   // Embedded strings cache (UUID -> string), persisted separately from icon cache.
   QByteArray loadEmbeddedStringsBlob(const QString& modName, const QString& lang) const;
@@ -235,9 +308,9 @@ private:
   QSet<QString>                 discoverLanguagesInMod(const QString&    modAbsPath,
                                                        PakManifestCache* pakManifestCache = nullptr,
                                                        ScanMetrics*      metrics = nullptr) const;
-  QSet<QString>                 uuidKeysUnionAllLanguages(const QString&    modAbsPath,
-                                                          PakManifestCache* pakManifestCache = nullptr,
-                                                          ScanMetrics*      metrics = nullptr) const;
+  QSet<QString> uuidKeysUnionAllLanguages(const QString&    modAbsPath,
+                                          PakManifestCache* pakManifestCache = nullptr,
+                                          ScanMetrics*      metrics          = nullptr) const;
 
   /**
    * UUID overlap vs another mod: returns (contentId, matchedRefModName).
